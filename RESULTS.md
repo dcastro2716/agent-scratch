@@ -11,12 +11,23 @@ Libreta del equipo: mediciones y decisiones. El `README.md` del proyecto no se t
 
 | Mensaje | Intención esperada | Intención devuelta | latency_ms | prompt_tokens | completion_tokens |
 |---|---|---|---|---|---|
-| Hola | `greeting` | `greeting` ✓ | 4927 | 377 | 193 |
-| ¿Cuánto cobran por retirar en un cajero de otro banco? | `product_question` | `product_question` ✓ | 4780 | 389 | 507 |
-| Quiero ver las comisiones que me cobraron este mes | `data_query` | `data_query` ✓ | 6180 | 388 | 626 |
-| Quiero que me devuelvan una comisión cobrada dos veces | `sensitive_action` | `sensitive_action` ✓ | 6702 | 389 | 712 |
-| ¿A cuánto está el dólar hoy? | `out_of_scope` | `out_of_scope` ✓ | 3311 | 384 | 270 |
+| Hola | `greeting` | `greeting` ✓ | 4469 | 377 | 117 |
+| ¿Cuánto cobran por retirar en un cajero de otro banco? | `product_question` | `product_question` ✓ | 4780 | 435 | 517 |
+| Quiero ver las comisiones que me cobraron este mes | `data_query` | `data_query` ✓ | 7677 | 572 | 925 |
+| Quiero que me devuelvan una comisión cobrada dos veces | `sensitive_action` | `sensitive_action` ✓ | 7020 | 734 | 757 |
+| ¿A cuánto está el dólar hoy? | `out_of_scope` | `out_of_scope` ✓ | 4032 | 914 | 355 |
 | **Promedio** | | **5/5 correctas** | **5180** | **385** | **462** |
+
+## Medicion con modelo nano
+
+| Mensaje | Intención esperada | Intención devuelta | latency_ms | prompt_tokens | completion_tokens |
+|---|---|---|---|---|---|
+| Hola | `greeting` | `greeting` ✓ | 6042 | 377 | 308 |
+| ¿Cuánto cobran por retirar en un cajero de otro banco? | `product_question` | `product_question` ✓ | 10643 | 434 | 1052 |
+| Quiero ver las comisiones que me cobraron este mes | `data_query` | `data_query` ✓ | 9128 | 530 | 1281 |
+| Quiero que me devuelvan una comisión cobrada dos veces | `sensitive_action` | `sensitive_action` ✓ | 8741 | 661 | 1393 |
+| ¿A cuánto está el dólar hoy? | `out_of_scope` | `out_of_scope` ✓ | 5399 | 771 | 693 |
+| **Promedio** | | **5/5 correctas** | **7990.6** | **554.6** | **675.4** |
 
 ### Observaciones
 
