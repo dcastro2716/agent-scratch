@@ -95,3 +95,6 @@ costo_mes = conversaciones/mes × turnos/conversación
 **Evidencia:** la latencia medida va de 3.3 s a 6.7 s — **2× entre el mejor y el peor caso**, y el peor es `sensitive_action`, justo el que más importa. Un timeout de 5 s (probado durante la sesión) cortaba `data_query` y `sensitive_action`. El techo no lo pone la red sino el largo de la respuesta, así que un prompt que genere respuestas más largas corre el límite hacia arriba.
 
 **Costo / riesgo que aceptamos:** con 30 s y 2 reintentos, el peor caso de cara al usuario es ~90 s antes del 504 de [routes.py:14](src/agent/infrastructure/api/routes.py#L14). Para un canal de chat es demasiado: revisar en T2, cuando haya datos de p95 real.
+
+
+## Semana 1 · Sesión 3 · Context engineering · Ingesta
