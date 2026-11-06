@@ -97,4 +97,32 @@ costo_mes = conversaciones/mes × turnos/conversación
 **Costo / riesgo que aceptamos:** con 30 s y 2 reintentos, el peor caso de cara al usuario es ~90 s antes del 504 de [routes.py:14](src/agent/infrastructure/api/routes.py#L14). Para un canal de chat es demasiado: revisar en T2, cuando haya datos de p95 real.
 
 
-## Semana 1 · Sesión 3 · Context engineering · Ingesta
+## Semana 2 · Sesión 3 · Context engineering · Ingesta
+
+Al terminar, el corpus del dominio está convertido, partido en chunks con su sección y su metadata, embebido con text-embedding-3-small y publicado en una base vectorial local (Qdrant, sin servidor). Es el insumo del retrieval de la sesión 4.
+
+```
+uv run ingest build
+   2  additional-services-fees.docx
+  ...
+  2  undue-charges-cases.pdf
+  ...
+29 chunks de 12 documentos -> data/chunks/fees.json
+
+uv run ingest publish
+29 chunks en data/index/fees
+```
+
+## Semana 2 · Sesión 4 · Retrieval
+
+Al terminar, el agente busca en el corpus del dominio antes de responder, cada respuesta dice de qué documento y sección salió, y el texto aparece mientras se escribe, como en cualquier chat con IA. Se conversa con él desde la terminal:
+
+```
+Tú: ¿Cuál es el plazo para presentar un reclamo?
+  Agente [product_question]: Para una operación no reconocida tienes hasta 60 días calendario desde la fecha de la operación.
+  Si el reclamo es por comisiones o intereses, el plazo es de 1 año desde el cobro.
+  Fuentes:
+   [1] claims-regulation.pdf · Reglamento de atención de reclamos - Banco Demo > 3. Presentación del reclamo > 3.1 Plazo para presentar
+  (primer texto en 450 ms, respuesta completa en 2140 ms, 1830 tokens de entrada, 95 de salida)
+Tú: ¿y si es por fraude?
+```
