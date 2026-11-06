@@ -28,7 +28,7 @@ Dominios: `fraud`, `fees`, `cards`, `loans` y `support` (variable `DOMAIN`).
 | `t4-*` → `t4-v0.4` | despliegue, trazas, evaluaciones y guardrails | ⏳ |
 | `v1.0` | integración final | ⏳ |
 
-Esta copia está en `t1-s1`. Para saber en qué versión está la tuya: `git describe --tags`.
+Esta copia está en `t2-s3`. Para saber en qué versión está la tuya: `git describe --tags`.
 
 ## Requisitos
 
