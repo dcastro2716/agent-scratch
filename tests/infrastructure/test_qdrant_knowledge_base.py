@@ -1,43 +1,81 @@
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
+from pathlib import Path
 
-from agent.domain.knowledge import Chunk
-from agent.infrastructure.search.qdrant_knowledge_base import QdrantKnowledgeBase
+from qdrant_client import QdrantClient, models
 
+from agent.domain.knowledge import Chunk, SearchHit
+from agent.infrastructure.search.hybrid import fuse_rankings, keyword_scores
 
-def chunk(chunk_id: str, source: str, vector: list[float], content: str = "texto", valid_until: date | None = None) -> Chunk:
-    return Chunk(id=chunk_id, content=content, content_vector=vector, doc_type="faq", section="FAQ", source=source,
-                 valid_until=valid_until)
-
-
-A1, A2, A3, B1 = (f"00000000-0000-0000-0000-00000000000{number}" for number in range(1, 5))
-
-
-def test_publish_replaces_the_chunks_of_each_source(tmp_path):
-    index = QdrantKnowledgeBase(tmp_path / "fraud", collection="fraud")
-    index.publish([chunk(A1, "a.md", [1, 0]), chunk(A2, "a.md", [0, 1]), chunk(B1, "b.md", [1, 1])])
-
-    index.publish([chunk(A3, "a.md", [1, 0])])
-
-    assert QdrantKnowledgeBase(tmp_path / "fraud", collection="fraud").count() == 2
+CANDIDATES_PER_SEARCH = 20  # cuántos chunks trae cada búsqueda (por significado y por palabras) antes de fusionar
+MAX_CHUNKS_READ = 10_000  # techo de chunks que se leen para la búsqueda por palabras
+_one_client_at_a_time = threading.Lock()  # el modo local admite un solo cliente abierto por carpeta
 
 
-def test_count_is_zero_before_publishing(tmp_path):
-    assert QdrantKnowledgeBase(tmp_path / "fraud", collection="fraud").count() == 0
+class QdrantKnowledgeBase:
+    """Implementa KnowledgeBase con Qdrant en modo local: una base vectorial embebida que vive en una carpeta, sin servidor."""
 
+    # ponytail: el modo local compara contra todos los vectores y BM25 recorre todo el corpus en cada búsqueda;
+    # alcanza para miles de chunks por dominio. Con más volumen o varios procesos: Azure AI Search (KNOWLEDGE_BASE)
+    def __init__(self, path: Path, collection: str) -> None:
+        self.path = path
+        self.collection = collection
 
-def test_search_combines_meaning_and_exact_words(tmp_path):
-    index = QdrantKnowledgeBase(tmp_path / "fraud", collection="fraud")
-    index.publish([chunk(A1, "a.md", [1, 0], "plazo para reclamos"), chunk(A2, "b.md", [0, 1], "contracargo de compras")])
+    def __str__(self) -> str:
+        return str(self.path)
 
-    hits = index.search("contracargo", [1, 0], top_k=2)
+    def publish(self, chunks: list[Chunk]) -> None:
+        if not chunks:
+            return
+        with self._client() as client:
+            if not client.collection_exists(self.collection):
+                vector_size = len(chunks[0].content_vector)
+                client.create_collection(self.collection, models.VectorParams(size=vector_size, distance=models.Distance.COSINE))
+            sources = sorted({chunk.source for chunk in chunks})
+            same_sources = models.Filter(must=[models.FieldCondition(key="source", match=models.MatchAny(any=sources))])
+            client.delete(self.collection, points_selector=models.FilterSelector(filter=same_sources))
+            client.upsert(self.collection, points=[
+                models.PointStruct(
+                    id=chunk.id, vector=chunk.content_vector, payload=chunk.model_dump(mode="json", exclude={"content_vector"})
+                )
+                for chunk in chunks
+            ])
 
-    # por significado gana A1, pero solo A2 tiene la palabra: la fusión lo sube al primer lugar
-    assert [hit.chunk.id for hit in hits] == [A2, A1]
-    assert hits[0].chunk.source == "b.md"
+    def count(self) -> int:
+        with self._client() as client:
+            return client.count(self.collection).count if client.collection_exists(self.collection) else 0
 
+    def search(self, text: str, vector: list[float], top_k: int) -> list[SearchHit]:
+        # un documento vencido no debe responder: se excluye antes de buscar, no después
+        expired = models.FieldCondition(key="valid_until", range=models.DatetimeRange(lt=date.today()))
+        still_valid = models.Filter(must_not=[expired])
+        with self._client() as client:
+            if not client.collection_exists(self.collection):
+                return []
+            closest_by_meaning = client.query_points(
+                self.collection, query=vector, query_filter=still_valid, limit=CANDIDATES_PER_SEARCH
+            ).points
+            valid_records, _ = client.scroll(self.collection, scroll_filter=still_valid, limit=MAX_CHUNKS_READ)
 
-def test_search_skips_expired_chunks(tmp_path):
-    index = QdrantKnowledgeBase(tmp_path / "fraud", collection="fraud")
-    index.publish([chunk(A1, "2022.md", [1, 0], valid_until=date(2024, 12, 31)), chunk(A2, "current.md", [1, 0])])
+        chunks_by_id = {str(record.id): Chunk.model_validate(record.payload) for record in valid_records}
+        word_scores = keyword_scores(text, [chunk.content for chunk in chunks_by_id.values()])
+        ranked_by_words = [
+            chunk_id
+            for chunk_id, score in sorted(zip(chunks_by_id, word_scores), key=lambda id_and_score: id_and_score[1], reverse=True)
+            if score > 0
+        ]
+        ranked_by_meaning = [str(point.id) for point in closest_by_meaning]
+        fused = fuse_rankings([ranked_by_meaning, ranked_by_words[:CANDIDATES_PER_SEARCH]])
+        return [SearchHit(chunk=chunks_by_id[chunk_id], score=score) for chunk_id, score in fused[:top_k] if chunk_id in chunks_by_id]
 
-    assert [hit.chunk.id for hit in index.search("texto", [1, 0], top_k=5)] == [A2]
+    @contextmanager
+    def _client(self) -> Iterator[QdrantClient]:
+        # se abre y se cierra en cada operación para no dejar la carpeta bloqueada (por ejemplo, para ingest publish)
+        with _one_client_at_a_time:
+            client = QdrantClient(path=str(self.path))
+            try:
+                yield client
+            finally:
+                client.close()
