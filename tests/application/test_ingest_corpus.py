@@ -14,3 +14,21 @@ def test_build_embeds_every_chunk_in_batches():
     assert len(chunks) == 5
     assert embedder.calls == [2, 2, 1]
     assert all(len(chunk.content_vector) == FakeEmbedder.DIM for chunk in chunks)
+
+
+def test_build_masks_personal_data_before_indexing():
+    document = SourceDocument(
+        source="cases.pdf", doc_type="cases", markdown="# Casos\n\nDNI 70451238, tarjeta 4111 1111 1111 1111."
+    )
+
+    class RecordingEmbedder(FakeEmbedder):
+        def embed(self, texts):
+            self.texts = texts
+            return super().embed(texts)
+
+    embedder = RecordingEmbedder()
+    [chunk] = IngestCorpus(embedder, chunk_max_chars=500, batch_size=2).build([document])
+    assert "70451238" not in chunk.content and "4111" not in chunk.content
+    assert "[DNI]" in chunk.content and "[TARJETA]" in chunk.content
+    assert embedder.texts == [chunk.content]
+    assert "70451238" in document.markdown  # el documento original no se modifica

@@ -6,3 +6,7 @@ __pycache__/
 data/**
 !data/*/
 !data/*/.gitkeep
+
+# evals/golden: se versionan solo los casos individuales
+evals/golden/*.jsonl
+!evals/golden/*.AIE_*.jsonl
