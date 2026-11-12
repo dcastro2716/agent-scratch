@@ -1,0 +1,1 @@
+{"id": "fees-AIE02AC", "type": "answerable", "history": [], "question": "¿Cómo se procede cuando el cliente reportó dos cobros?", "expected_intent": "product_question", "expected_sources": ["fee-refund-policy.docx", "fees-faq.md"], "forbidden_sources": [], "key_facts": ["cobro duplicado"]}
