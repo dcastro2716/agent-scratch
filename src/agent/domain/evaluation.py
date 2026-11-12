@@ -1,4 +1,4 @@
-"""Evaluación del RAG: casos del golden set, nota del juez y resultado de cada caso."""
+"""Evaluación del RAG: los casos del golden set, la nota del juez y el resultado de cada caso."""
 
 from enum import StrEnum
 
@@ -8,12 +8,12 @@ from agent.domain.models import Intent, Usage
 
 
 class CaseType(StrEnum):
-    ANSWERABLE = "answerable"
-    FOLLOW_UP = "follow_up"
-    EXPIRED = "expired"
-    NOISE = "noise"
-    OUT_OF_SCOPE = "out_of_scope"
-    PERSONAL_DATA = "personal_data"
+    ANSWERABLE = "answerable"  # la respuesta está en el corpus
+    FOLLOW_UP = "follow_up"  # pregunta de seguimiento: solo se entiende con el historial
+    EXPIRED = "expired"  # tienta a usar un documento vencido
+    NOISE = "noise"  # tienta a usar un documento que no tiene nada que ver
+    OUT_OF_SCOPE = "out_of_scope"  # fuera del dominio
+    PERSONAL_DATA = "personal_data"  # pregunta por casos que tienen DNI y tarjetas
 
 
 class GoldenCase(BaseModel):
@@ -23,26 +23,26 @@ class GoldenCase(BaseModel):
 
     id: str
     type: CaseType
-    history: list[str] = []
+    history: list[str] = []  # mensajes anteriores del cliente, en orden
     question: str
     expected_intent: Intent
-    expected_sources: list[str] = []
-    forbidden_sources: list[str] = []
-    key_facts: list[str] = []
+    expected_sources: list[str] = []  # alguna de estas debe aparecer entre lo recuperado y lo citado
+    forbidden_sources: list[str] = []  # documentos vencidos o de ruido: nunca se deben citar
+    key_facts: list[str] = []  # textos exactos que la respuesta debe incluir
 
 
 class Verdict(BaseModel):
     """La nota del juez sobre una respuesta."""
 
-    groundedness: float  # de 1 a 5
-    relevance: float  # de 1 a 5
-    citation_correct: float  # de 0 a 1
+    groundedness: float  # de 1 a 5: todo lo que dice la respuesta está en los fragmentos
+    relevance: float  # de 1 a 5: responde lo que se preguntó
+    citation_correct: float  # de 0 a 1: las fuentes citadas dicen lo que afirma la respuesta
     reasoning: str = ""  # solo G-Eval explica su nota
     judge: str
 
 
 class CaseResult(BaseModel):
-    """Resultado de un caso. None indica que el control no aplica."""
+    """Lo que pasó con un caso: la respuesta y cada control. None quiere decir que el control no aplica al caso."""
 
     case_id: str
     case_type: CaseType

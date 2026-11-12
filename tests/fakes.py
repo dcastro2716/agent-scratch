@@ -116,7 +116,7 @@ class FakeKnowledgeBase:
 
 
 class FakeJudge:
-    """Devuelve un veredicto fijo y registra las preguntas que calificó."""
+    """Pone siempre la misma nota y anota qué preguntas calificó."""
 
     def __init__(self) -> None:
         self.questions: list[str] = []

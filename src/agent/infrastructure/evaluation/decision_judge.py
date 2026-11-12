@@ -25,7 +25,7 @@ RELEVANCE_LEVELS = [
 
 
 class DecisionJudge:
-    """Evalúa respuestas con el modelo Decision-1 de Microsoft Foundry."""
+    """JUDGE=azure_evaluation: decision-1, un modelo de decisión de Foundry. No escribe: devuelve números."""
 
     def __init__(self, endpoint: str, credential: Credential, deployment: str, timeout_s: float) -> None:
         self.url = f"{endpoint.rstrip('/')}/providers/microsoft/v1/systemone"
@@ -43,29 +43,24 @@ class DecisionJudge:
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_s) as response:
-                return verdict_from(json.loads(response.read()))
+                return verdict_from(json.loads(response.read().decode("utf-8")))
         except urllib.error.HTTPError as error:
             raise AgentError(ErrorKind.UPSTREAM, f"decision-1 respondió {error.code}") from error
         except TimeoutError as error:
             raise AgentError(ErrorKind.TIMEOUT, "decision-1 no respondió a tiempo") from error
         except urllib.error.URLError as error:
-            if isinstance(error.reason, TimeoutError):
-                raise AgentError(ErrorKind.TIMEOUT, "decision-1 no respondió a tiempo") from error
-            raise AgentError(ErrorKind.UPSTREAM, "no se pudo conectar con decision-1") from error
-        except (json.JSONDecodeError, UnicodeDecodeError) as error:
-            raise AgentError(ErrorKind.INVALID_OUTPUT, "decision-1 no devolvió JSON válido") from error
+            raise AgentError(ErrorKind.UPSTREAM, f"no se pudo llamar a decision-1: {error.reason}") from error
 
 
 def _authorization(credential: Credential) -> dict[str, str]:
-    if callable(credential):
-        return {"Authorization": f"Bearer {credential()}"}
-    return {"api-key": credential}
+    # Entra ID: un token renovable (az login o Managed Identity). Una key fija solo la usa el mock
+    return {"Authorization": f"Bearer {credential()}"} if callable(credential) else {"api-key": credential}
 
 
 def decision_request(
     deployment: str, question: str, fragments: list[SearchHit], answer: str, cited: list[Citation]
 ) -> dict[str, Any]:
-    """Agrupa los tres criterios de evaluación en una sola solicitud."""
+    """Una sola llamada con las tres preguntas sobre el mismo estado: la pregunta, los fragmentos y la respuesta."""
     return {
         "model": deployment,
         "state": {
@@ -100,21 +95,20 @@ def decision_request(
     }
 
 
-def verdict_from(payload: object) -> Verdict:
-    answers = payload.get("answers") if isinstance(payload, dict) else None
-    if not isinstance(answers, dict):
-        raise AgentError(ErrorKind.INVALID_OUTPUT, "decision-1 no devolvió las calificaciones")
+def verdict_from(payload: dict[str, Any]) -> Verdict:
+    answers = payload.get("answers", {})
     return Verdict(
-        groundedness=_number(answers, "groundedness", "score", 4) + 1,
-        relevance=_number(answers, "relevance", "score", 4) + 1,
-        citation_correct=_number(answers, "citation_correct", "noul", 1),
+        # el puntaje es el promedio de los niveles pesado por su probabilidad, de 0 a 4: se lleva a la escala de 1 a 5
+        groundedness=_number(answers, "groundedness", "score") + 1,
+        relevance=_number(answers, "relevance", "score") + 1,
+        # una pregunta "noul" responde en el campo del mismo nombre: la probabilidad de "true", de 0 a 1
+        citation_correct=_number(answers, "citation_correct", "noul"),
         judge="decision-1",
     )
 
 
-def _number(answers: dict[str, Any], question: str, field: str, maximum: int) -> float:
-    answer = answers.get(question)
-    value = answer.get(field) if isinstance(answer, dict) else None
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= maximum:
-        raise AgentError(ErrorKind.INVALID_OUTPUT, f"decision-1 no devolvió un número válido para {question}")
-    return float(value)
+def _number(answers: dict[str, Any], question: str, field: str) -> float:
+    answer = answers.get(question, {})
+    if not isinstance(answer.get(field), int | float):
+        raise AgentError(ErrorKind.INVALID_OUTPUT, f"decision-1 no devolvió un número para {question}: {answer}")
+    return float(answer[field])

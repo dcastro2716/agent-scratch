@@ -79,7 +79,7 @@ class FoundryChatModel:
         yield ModelResult(reply=reply, usage=usage)
 
     def parse[Output: BaseModel](self, messages: list[Message], schema: type[Output]) -> tuple[Output, Usage]:
-        """Solicita una respuesta estructurada y devuelve el resultado y su consumo."""
+        """Cualquier structured output: lo usan complete, rewrite y el juez G-Eval (S5)."""
         start = time.perf_counter()
         with foundry_errors():
             completion = self.client.chat.completions.parse(

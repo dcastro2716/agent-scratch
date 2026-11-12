@@ -89,7 +89,7 @@ class AgentTurn(BaseModel):
     reply: AgentReply
     usage: Usage
     citations: list[Citation] = []
-    hits: list[SearchHit] = []  # fragmentos recuperados para la evaluación y el juez; no salen en la API
+    hits: list[SearchHit] = []  # lo que se recuperó: lo usan la evaluación y el juez; no sale en la API
 
 
 class IntentDetected(BaseModel):
