@@ -1,6 +1,6 @@
 ## Línea base (S5)
 
-Dominio `fees`, equipo 01. Búsqueda en Qdrant local y juez G-Eval.
+Dominio `fees`, equipo 01. Búsqueda en Qdrant local y juez G-Eval:
 
     Resumen de 30 casos (juez local):
       recall@5: 0.89   intención: 1.00   fuentes: 0.90   hechos: 0.41
@@ -10,13 +10,13 @@ Dominio `fees`, equipo 01. Búsqueda en Qdrant local y juez G-Eval.
 
 Detalle por caso: `data/eval/fees-20261110-215125.json`
 
-### Mi caso del golden set - Preguntas
+### Mi caso del golden set - Preguntas:
 
 - **Pregunta (`fees-AIE37JG`).** ¿Cuánto cuesta pedir una copia del voucher de una operación?
 - **Por qué lo elegí.** Los 30 casos base no cubren este servicio. La pregunta comprueba si el agente encuentra y cita la tarifa exacta de la tabla de servicios adicionales.
 - **Cómo le fue al agente.** Recuperó `additional-services-fees.docx`. Respondió «cinco soles por voucher». El importe coincide con el tarifario.
 
-### Resultado de mis cinco casos - Juez Local
+### Resultado de mis cinco casos - Juez Local:
 
     Resumen de 5 casos (juez local):
       recall@5: 0.80   intención: 1.00   fuentes: 0.80   hechos: 0.20
@@ -26,7 +26,7 @@ Detalle por caso: `data/eval/fees-20261110-215125.json`
 
 Reporte de la corrida previa a la asignación de IDs únicos: `data/eval/fees-20261110-233230.json`.
 
-### Resultado de juez azure_evaluation
+### Resultado de juez azure_evaluation:
 
 Resumen de 35 casos (juez azure_evaluation):
   recall@8: 1.00   intención: 0.97   fuentes: 0.97   hechos: 0.56
