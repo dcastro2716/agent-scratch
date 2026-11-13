@@ -58,4 +58,3 @@ KNOWLEDGE_BASE=local uv run eval --limit 30
 ```
 
 La comparación con el reranker de Azure AI Search queda pendiente por el error HTTP 402 de cuota semántica observado en el paso 9 y 12.
-Se supero el error HTTP 402 de cuota semmantica.
