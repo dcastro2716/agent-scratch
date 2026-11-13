@@ -16,7 +16,7 @@ Detalle por caso: `data/eval/fees-20261110-215125.json`
 - **Por qué lo elegí.** Los 30 casos base no cubren este servicio. La pregunta comprueba si el agente encuentra y cita la tarifa exacta de la tabla de servicios adicionales.
 - **Cómo le fue al agente.** Recuperó `additional-services-fees.docx`. Respondió «cinco soles por voucher». El importe coincide con el tarifario.
 
-### Resultado de mis cinco casos - Juez Local:
+### Resultado de 5 casos - Juez Local:
 
     Resumen de 5 casos (juez local):
       recall@5: 0.80   intención: 1.00   fuentes: 0.80   hechos: 0.20
@@ -26,15 +26,41 @@ Detalle por caso: `data/eval/fees-20261110-215125.json`
 
 Reporte de la corrida previa a la asignación de IDs únicos: `data/eval/fees-20261110-233230.json`.
 
-### Resultado de juez azure_evaluation:
+### Resultado de 35 casos - Juez Local:
 
-Resumen de 35 casos (juez azure_evaluation):
-  recall@8: 1.00   intención: 0.97   fuentes: 0.97   hechos: 0.56
-  apoyo: 5.0/5   relevancia: 4.8/5   cita correcta: 1.0
-  fugas de datos personales: 0   citas de fuentes prohibidas: 0
-  tokens: 41759 de entrada, 43381 de salida
+    Resumen de 35 casos (juez local):
+      recall@8: 0.91   intención: 1.00   fuentes: 0.91   hechos: 0.38
+      apoyo: 4.9/5   relevancia: 4.7/5   cita correcta: 1.0
+      fugas de datos personales: 0   citas de fuentes prohibidas: 0
+      tokens: 41989 de entrada, 47694 de salida
 
-Reporte de la corrida previa a la asignación de IDs únicos: `data/eval/fees-20261112-092615.json`.
+Reporte: `data/eval/fees-20261113-101050.json`.
+
+### Resultado de 35 casos - Juez azure_evaluation:
+
+    Resumen de 35 casos (juez azure_evaluation):
+      recall@8: 0.91   intención: 0.97   fuentes: 0.86   hechos: 0.44
+      apoyo: 5.0/5   relevancia: 4.6/5   cita correcta: 0.9
+      fugas de datos personales: 0   citas de fuentes prohibidas: 1
+      tokens: 41935 de entrada, 52335 de salida
+
+Reporte: `data/eval/fees-20261113-102003.json`.
+
+## Comparación de jueces (35 casos por corrida)
+
+| Métrica | Local (G-Eval) | Azure (Decision-1) |
+|---|---:|---:|
+| Recall@8 | 0.91 | 0.91 |
+| Intención | 1.00 | 0.97 |
+| Fuentes | 0.91 | 0.86 |
+| Hechos | 0.38 | 0.44 |
+| Apoyo | 4.9/5 | 5.0/5 |
+| Relevancia | 4.7/5 | 4.6/5 |
+| Cita correcta | 1.0 | 0.9 |
+| Fugas de datos personales | 0 | 0 |
+| Citas prohibidas | 0 | 1 |
+| Tokens de entrada | 41 989 | 41 935 |
+| Tokens de salida | 47 694 | 52 335 |
 
 ## Antes y después (S5):
 
