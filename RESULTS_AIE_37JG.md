@@ -36,7 +36,7 @@ Resumen de 35 casos (juez azure_evaluation):
 
 Reporte de la corrida previa a la asignación de IDs únicos: `data/eval/fees-20261112-092615.json`.
 
-## Antes y después (S5)
+## Antes y después (S5):
 
 Las corridas usan los mismos 30 casos base de `fees`, Qdrant local, el chat `gpt-5-nano` y el juez G-Eval con `gpt-5-mini`. Cada prueba cambia una variable respecto de la línea base.
 
