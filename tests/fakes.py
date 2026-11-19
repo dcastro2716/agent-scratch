@@ -109,7 +109,6 @@ class ToolCallingChatModel(FakeChatModel):
         reply = AgentReply(intent=Intent.DATA_QUERY, answer=f"[fake] la tool dijo: {messages[-1]['content']}", sources=[])
         return ModelResult(reply=reply, usage=Usage(models=["fake"], llm_calls=1, prompt_tokens=30, completion_tokens=8))
 
-
 class FakeTools:
     """Una consulta y una acción sensible del dominio fees. Anota qué tools se ejecutaron de verdad."""
 
