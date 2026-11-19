@@ -18,8 +18,6 @@ Cómo le fue al agente: Apoyo y relevancia siempre 5.0/5. Hechos mejora de 0.70 
 | Azure Search, top_k=5      |  1.00  |  0.97   |  0.75  |  5.0  |    5.0     | 1.0  |     29903      |     13554     | data/eval/fees-20261118-205633.json |
 | **Azure Search, top_k=3**  |**1.00**|**0.97** |**0.79**|  5.0  |    5.0     | 1.0  |     25405      |     13373     | data/eval/fees-20261118-210214.json |
 
-Nota: chunks 800 produce los mismos 29 chunks que chunks 1500 (todos los documentos son < 677 chars). La variación en hechos es no-determinismo del modelo.
-Todas las corridas: intención=1.00, fugas de datos personales=0, citas de fuentes prohibidas=1.
 
 
 ## Mejor corrida
@@ -85,3 +83,37 @@ No. En la consulta de comisiones el agente dijo que no pudo recuperar los datos 
 ### Conclusión
 
 El agente se comporta como se espera en los cuatro escenarios: consulta el MCP cuando corresponde, deja las acciones sensibles pendientes de aprobación y rechaza lo que no es de su dominio. El límite es el backend compartido de comisiones, que no respondió durante la prueba, así que la consulta con datos reales no se pudo verificar en el compartido. Las tools de `cards`, `fraud`, `loans` y `support` no aparecen en el MCP compartido, por lo que sólo se verificaron con el mock.
+
+
+## Sesión 7 — Skills, memoria de trabajo y Agent Framework
+
+Dominio: `fees`. La misma conversación con los dos runtimes (paso 7).
+
+| | `react` | `agent_framework` |
+|---|---|---|
+| Tools pedidas en la consulta | `get_charged_fees(customer_id=CUS-1001)` | `get_charged_fees(customer_id=CUS-1001)` |
+| La acción sensible quedó **NO SE EJECUTA** | Sí, `request_fee_refund(fee_id=FEE-4002)` | Sí, `request_fee_refund(fee_id=FEE-4002)` |
+| Pregunta de memoria respondida sin `→` | Sí (“Tu código es CUS-1001. No has pedido devolución aún.”) | Sí (recuerda el código y la comisión de la memoria de trabajo) |
+| Primer texto (ms) | 16795 | 19729 |
+| Respuesta completa (ms) | 17108 | 20024 |
+| Tokens (entrada / salida) | 2912 / 1073 (consulta), 2777 / 1952 (refund) | 2912 / 1606 (consulta), 4425 / 4178 (refund) |
+
+### ¿La skill frenó la tool de otro dominio?
+
+Mensaje: “Bloquea la tarjeta CRD-2002”.
+
+- **react**: Respondió `out_of_scope`, no llamó a ninguna tool. “No puedo bloquear tarjetas desde este canal.” (9983 / 10149 ms, 1339 / 923 tokens)
+- **agent_framework**: Respondió `out_of_scope`, no llamó a ninguna tool. “No puedo bloquear tarjetas. Mi función es ayudar con comisiones.” (6534 / 6699 ms, 1339 / 542 tokens)
+
+La skill de `fees` solo lista `get_charged_fees`, `get_transactions` y `request_fee_refund`; `block_card` no está en la lista, así que el modelo no la ve.
+
+### Diferencias entre los dos runtimes
+
+- **Agent Framework llama más tools**: en la acción de refund, agent_framework primero consultó `get_charged_fees` y luego `request_fee_refund` (2 llamadas); react fue directo al refund (1 llamada). Esto hace que agent_framework consuma más tokens (4425/4178 vs 2777/1952) y tarde más (35s vs 19s).
+- **Latencia**: react es consistentemente más rápido (~17s vs ~20s en consulta, ~19s vs ~35s en refund).
+- **Respuestas**: ambos dan la misma calidad de respuesta y citan las mismas fuentes.
+- **Rechazo de otro dominio**: ambos rechazan correctamente, agent_framework es más rápido aquí (6.5s vs 10s).
+
+### Conclusión
+
+Ambos runtimes se comportan correctamente: consultan tools del dominio, dejan acciones sensibles pendientes de aprobación, responden preguntas de memoria sin tools y rechazan tools de otro dominio. React es más eficiente en tokens y latencia porque va directo a la tool necesaria; Agent Framework es más cauteloso (re-consulta datos antes de actuar). Para producción, react es preferible por costo y velocidad sin sacrificar calidad.
