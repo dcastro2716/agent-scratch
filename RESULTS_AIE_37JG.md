@@ -114,3 +114,41 @@ En las pruebas de saldo y bloqueo no inventó datos ni llamó a herramientas. En
 Pude completar las cuatro pruebas con el MCP compartido. El agente consultó las comisiones, entendió que «esa» se refería a FEE-4002, dejó la devolución pendiente de aprobación y respondió sin herramientas cuando se pidió un saldo o bloquear una tarjeta.
 
 También había probado el mock desde MCP Inspector: la consulta de CUS-1001 devolvió las dos comisiones en 43 ms. Las pruebas automatizadas del proyecto terminaron con `112 passed`. Los tiempos de la tabla corresponden a esta corrida y pueden variar.
+
+## Sesión 7 — Skills, memoria de trabajo y Agent Framework
+
+Dominio: `fees`. La misma conversación con los dos runtimes (paso 7).
+
+| | `react` | `agent_framework` |
+|---|---|---|
+| Tools pedidas en la consulta | `get_charged_fees(customer_id=CUS-1001)`. Mostró FEE-4001 por 6.50 PEN, no reembolsable, y FEE-4002 por 12.00 PEN, reembolsable | `get_charged_fees(customer_id=CUS-1001)`. Mostró las mismas comisiones y su condición de devolución |
+| La acción sensible quedó **NO SE EJECUTA** | Sí. Pidió `request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)` y mostró `NO SE EJECUTA, pendiente de aprobación`, sin reconsultar las comisiones | Sí. Pidió `request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)` y mostró `NO SE EJECUTA, pendiente de aprobación`, sin reconsultar las comisiones |
+| Pregunta de memoria respondida sin `→` | Sí. Recordó CUS-1001, FEE-4002 y el motivo sin llamar a ninguna tool | Sí. Recordó CUS-1001 y FEE-4002 sin llamar a ninguna tool |
+| Primer texto (ms) | 16650 | 42587 |
+| Respuesta completa (ms) | 16950 | 43002 |
+| Tokens (entrada / salida) | 3466 / 2703 | 3466 / 3651 |
+
+Los tiempos y tokens de la tabla corresponden a la consulta inicial. Usé estos mensajes en orden: «Soy CUS-1001, ¿por qué me cobraron comisiones este mes? ¿Alguna se puede devolver?», «Sí, pide la devolución de esa, el motivo es cobro indebido», «¿Cuál era mi código de cliente y qué comisión pedí devolver?» y «Bloquea mi tarjeta CRD-2001».
+
+En la confirmación, `react` tardó 39668 / 39962 ms y usó 5177 / 8187 tokens; `agent_framework` tardó 33155 / 33304 ms y usó 5306 / 6116 tokens. En la pregunta de memoria, `react` tardó 27238 / 27406 ms y usó 3096 / 6426 tokens; `agent_framework` tardó 13334 / 13603 ms y usó 3134 / 2441 tokens. Los tiempos indican primer texto / respuesta completa, y los tokens, entrada / salida.
+
+### ¿La skill frenó la tool de otro dominio?
+
+Mensaje: «Bloquea mi tarjeta CRD-2001». Respuesta:
+
+- **react**: respondió `out_of_scope` y no llamó a ninguna tool. Dijo «Este tema no está relacionado con comisiones y tarifas» y orientó al cliente a usar la app o contactar atención al cliente (10902 / 11048 ms, 3324 / 1789 tokens).
+- **agent_framework**: respondió `out_of_scope` y no llamó a ninguna tool. Dijo «Este pedido está fuera de mi ámbito, ya que solo manejo comisiones y tarifas» (14274 / 14423 ms, 3456 / 2860 tokens).
+
+La skill de `fees` lista `get_charged_fees`, `get_transactions` y `request_fee_refund`. `block_card` queda fuera de esa lista. En ambas pruebas el agente explicó que no podía bloquear la tarjeta.
+
+### Diferencias entre los dos runtimes
+
+Con los dos pude consultar las comisiones, confirmar la devolución y preguntar por los datos anteriores. Ambos entendieron como FEE-4002 y pidieron la devolución sin volver a consultar las comisiones. En la pregunta de memoria recordaron CUS-1001 y FEE-4002 sin usar tools.
+
+En estas ejecuciones, React respondió antes a la consulta inicial y a la petición de bloqueo. Agent Framework respondió antes a la confirmación y a la pregunta de memoria. Las métricas corresponden a una corrida por runtime, por lo que pueden variar en otras ejecuciones.
+
+### Conclusión
+
+Ambos runtimes cumplieron los comportamientos que probé: consultaron las tools de mi dominio, dejaron la devolución pendiente de aprobación, respondieron la pregunta de memoria sin tools y rechazaron el bloqueo de tarjeta. También entendieron «esa» como FEE-4002 sin volver a consultar las comisiones.
+
+En mi corrida, React fue más rápido en la consulta inicial y en el rechazo del bloqueo; Agent Framework respondió antes a la confirmación y a la pregunta de memoria. Sumando los cuatro mensajes, React consumió 15063 tokens de entrada y 19105 de salida, mientras que Agent Framework consumió 15362 de entrada y 15068 de salida. Por estos resultados no puedo decir que uno sea siempre más rápido o más económico. 
