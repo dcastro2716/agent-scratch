@@ -1,3 +1,10 @@
+# AIE_37JG
+
+Dominio: fees
+equipo: 01
+
+# Sesión 5 - Resultados de ejecución
+
 ## Línea base (S5)
 
 Dominio `fees`, equipo 01. Búsqueda en Qdrant local y juez G-Eval:
@@ -83,73 +90,7 @@ Las corridas usan los mismos 30 casos base de `fees`, Qdrant local, el chat `gpt
 KNOWLEDGE_BASE=local uv run eval --limit 30
 ```
 
-La comparación con el reranker de Azure AI Search estuvo bloqueada por el error HTTP 402 de cuota semántica observado en los pasos 9 y 12. La nueva evaluación completa en Azure se documenta a continuación.
-
-### Observaciones de sesión 5 — Evidencia completada desde sesión 7
-
-El 19/11/2026 repetí los 30 casos base de `fees` con Foundry real y la base publicada en Azure AI Search. Esta evaluación complementa los resultados históricos de Qdrant que aparecen arriba.
-
-#### Línea base con Azure AI Search y Foundry
-
-Usé el código de referencia `t2-s5` (commit `0662ec6eb01f46ed14cc47e3bda3c6672998079b`) en una copia temporal, con la configuración de Azure de mi proyecto de sesión 7. Así evalué el RAG de sesión 5. La configuración de esta corrida fue:
-
-| Configuración | Valor |
-|---|---|
-| Base de conocimiento | `KNOWLEDGE_BASE=azure_search` |
-| Servicio de búsqueda | `https://srch-workshop-jsu3.search.windows.net` |
-| Índice publicado | `idx-team-01`, con 29 fragmentos confirmados al arrancar |
-| Recuperación | Búsqueda híbrida de texto y vectores, reranker semántico `default` y filtro de vigencia |
-| Fragmentos recuperados | `SEARCH_TOP_K=5`, para la línea base |
-| Modelo del agente en Foundry | `gpt-5-nano` (`gpt-5-nano-2025-08-07`) |
-| Juez | G-Eval con `gpt-5-mini` en Foundry (`gpt-5-mini-2025-08-07`) |
-| Casos | Los mismos 30 casos base de `fees` de sesión 5 |
-| Tiempo máximo por petición | 180 segundos durante esta evaluación |
-
-El nombre «juez local» indica que el cálculo de la evaluación se coordina desde el proyecto; las llamadas del agente y del juez fueron a Foundry. El timeout se amplió solo para esta corrida. El top-k 8 elegido anteriormente sigue siendo la configuración de mi proyecto.
-
-```text
-Resumen de 30 casos (juez local):
-  recall@5: 1.00   intención: 0.97   fuentes: 0.97   hechos: 0.59
-  apoyo: 4.9/5   relevancia: 4.7/5   cita correcta: 1.0
-  fugas de datos personales: 0   citas de fuentes prohibidas: 0
-  tokens: 28994 de entrada, 41779 de salida
-```
-
-Detalle local de la corrida: `data/eval/s5-azure-baseline.json`. Contiene los 30 resultados y la configuración utilizada. El resumen queda incorporado en este MD acumulativo para su revisión, ya que `data/` está excluido de Git.
-
-Esta vez el reranker semántico respondió y la evaluación terminó completa, sin el error de cuota HTTP 402 anterior. Se recuperó una fuente esperada en los 27 casos que tenían fuentes requeridas, incluidos `fees-11`, `fees-22` y `fees-23`.
-
-#### Metas del paso 12
-
-| Control | Meta | Resultado en Azure | Estado |
-|---|---|---|---|
-| Recall@5 | ≥ 0.80 | 1.00 | Cumple |
-| Hechos | ≥ 0.75 | 0.59, 16 de 27 casos aplicables | Pendiente de mejorar |
-| Apoyo | ≥ 4.0/5 | 4.9/5 | Cumple |
-| Fugas de datos personales | 0 | 0 | Cumple |
-| Citas de fuentes prohibidas | 0 | 0 | Cumple |
-
-#### Qué cambiaría para llegar a la meta de hechos
-
-Revisé los 11 fallos de hechos del nuevo JSON. En todos se recuperó una fuente esperada, así que el siguiente cambio que probaría está en cómo el prompt pide usar los datos del contexto.
-
-| Problema observado | Casos | Cambio propuesto |
-|---|---|---|
-| El dato se expresó con otras palabras o con otro formato, por lo que no coincidió con `key_facts` | `fees-02`, `fees-04`, `fees-05`, `fees-07`, `fees-13`, `fees-20`, `fees-22` | Conservar la moneda, los números, separadores, espacios de porcentajes y condiciones tal como aparecen en el fragmento. Por ejemplo, mantener `0,005 %`, `S/ 1 000` y `S/ 3.50` |
-| La respuesta omitió el importe o el plazo pedido | `fees-06`, `fees-11`, `fees-12`, `fees-29` | Pedir que la respuesta incluya el importe, moneda o plazo que resuelve la pregunta, junto con su fuente. Evitar respuestas que solo remitan al tarifario |
-
-Agregaría esta instrucción a `src/agent/infrastructure/prompts/fees.md`:
-
-> Cuando respondas sobre una tarifa, impuesto o devolución, incluye el importe y la moneda, el porcentaje, el plazo o la condición que responde a la pregunta, según corresponda. Conserva esos datos y sus expresiones como aparecen en los fragmentos recuperados, incluidos los separadores y espacios. Escribe los importes con cifras. Si están en una tabla, relaciona la fila del servicio con la columna del producto consultado. Si falta el dato, dilo y no lo inventes.
-
-Por ejemplo, `fees-07` respondió «veinticinco soles», aunque la fuente indica `S/ 25`; `fees-06` citó el estado de cuenta físico, pero omitió su precio; y `fees-22` respondió «tres soles con cincuenta céntimos» en lugar de `S/ 3.50`. Son problemas que el cambio propuesto aborda directamente. El evaluador actual comprueba coincidencias de texto normalizado, así que parte de los fallos corresponde a formas equivalentes y parte a datos realmente omitidos.
-
-Para verificar el cambio repetiría los mismos 30 casos con el mismo índice, modelos, juez y top-k 5, cambiando solo esa instrucción. La meta requiere al menos 21 de los 27 casos aplicables: cinco aciertos más que en esta línea base. También revisaría que se mantengan recall ≥ 0.80, apoyo ≥ 4.0, cero fugas y cero citas prohibidas. El prompt queda como propuesta concreta del paso 12; todavía no se midió su efecto y no doy por alcanzada la meta de hechos.
-
-Como observación adicional, `fees-27` respondió a la pregunta sobre el dólar como `product_question` y citó una fuente, aunque se esperaba `out_of_scope`. Esto explica los resultados de intención y fuentes de 0.97. No hubo citas prohibidas.
-
-
-## Sesión 6 — Tools del MCP en el chat
+# Sesión 6 — Tools del MCP en el chat
 
 Dominio: `fees`. MCP: el mock (`http://127.0.0.1:8200/mcp`) y el compartido (`bank-mcp`). Las cuatro pruebas de chat de esta tabla se ejecutaron contra el compartido, con Foundry y Azure AI Search, en la misma conversación de `dev/chat.py`.
 
@@ -179,7 +120,7 @@ Pude completar las cuatro pruebas con el MCP compartido. El agente consultó las
 
 También había probado el mock desde MCP Inspector: la consulta de CUS-1001 devolvió las dos comisiones en 43 ms. Las pruebas automatizadas del proyecto terminaron con `112 passed`. Los tiempos de la tabla corresponden a esta corrida y pueden variar.
 
-## Sesión 7 — Skills, memoria de trabajo y Agent Framework
+# Sesión 7 — Skills, memoria de trabajo y Agent Framework
 
 Dominio: `fees`. La misma conversación con los dos runtimes (paso 7).
 
