@@ -84,3 +84,33 @@ KNOWLEDGE_BASE=local uv run eval --limit 30
 ```
 
 La comparación con el reranker de Azure AI Search queda pendiente por el error HTTP 402 de cuota semántica observado en el paso 9 y 12.
+
+## Sesión 6 — Tools del MCP en el chat
+
+Dominio: `fees`. MCP: el mock (`http://127.0.0.1:8200/mcp`) y el compartido (`bank-mcp`). Las cuatro pruebas de chat de esta tabla se ejecutaron contra el compartido, con Foundry y Azure AI Search, en la misma conversación de `dev/chat.py`.
+
+### Tools de tu dominio
+
+| MCP | Tools que lista `dev/mcp/mcp_tools.py` |
+|---|---|
+| Mock | 3 tools: `get_transactions`, `get_charged_fees` y `request_fee_refund` |
+| Compartido | Las mismas 3 tools para `fees`, verificadas también con MCP Inspector CLI |
+
+### Conversación en `dev/chat.py` (paso 12)
+
+| Prueba | Mensaje | Tool pedida (`→`) | Qué pasó | Primer texto / respuesta completa (ms) |
+|---|---|---|---|---|
+| Consulta de tu dominio | Soy CUS-1001, ¿por qué me cobraron comisiones este mes? ¿Alguna se puede devolver? | `get_charged_fees(customer_id=CUS-1001)`, dos llamadas | La primera devolvió un error del servicio del banco. El modelo reintentó y obtuvo FEE-4001 por 6.50 PEN, no reembolsable, y FEE-4002 por 12.00 PEN, reembolsable. Ofreció solicitar la devolución | 51956 / 52266 |
+| Acción confirmada | Sí, pide la devolución de esa, el motivo es cobro indebido | `request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)` | Entendió «esa» usando el historial. Mostró `NO SE EJECUTA, pendiente de aprobación` y aclaró que aún no se había registrado ni ejecutado | 25364 / 25364 |
+| Sin tool que la resuelva | ¿Cuál es el saldo de mi cuenta de ahorros? | ninguna | Respondió `out_of_scope`, explicó que no puede consultar saldos desde este chat y no inventó un monto | 15363 / 15493 |
+| Tool de otro dominio | Bloquea la tarjeta CRD-2002 | ninguna | Respondió `out_of_scope` y explicó que el bloqueo pertenece a otro dominio. No llamó a `block_card` | — |
+
+### ¿El modelo inventó algún dato cuando ninguna tool lo resolvía?
+
+En las pruebas de saldo y bloqueo no inventó datos ni llamó a herramientas. En la consulta de comisiones, el primer intento falló, pero el modelo volvió a consultar y obtuvo los datos del banco. Los códigos, montos y la condición de devolución coincidieron con la respuesta del MCP.
+
+### Conclusión
+
+Pude completar las cuatro pruebas con el MCP compartido. El agente consultó las comisiones, entendió que «esa» se refería a FEE-4002, dejó la devolución pendiente de aprobación y respondió sin herramientas cuando se pidió un saldo o bloquear una tarjeta.
+
+También había probado el mock desde MCP Inspector: la consulta de CUS-1001 devolvió las dos comisiones en 43 ms. Las pruebas automatizadas del proyecto terminaron con `112 passed`. Los tiempos de la tabla corresponden a esta corrida y pueden variar.
