@@ -63,6 +63,37 @@ Tiene el mejor puntaje en fuentes (0.98) y empata con la base en hechos (0.79).
 El recall@3 sigue en 1.00. El fragmento correcto siempre aparece entre los 3 primeros, así que los 2 de más que trae top_k=5 no suman nada, solo ruido.
 Es más barata: gasta cerca de un 15% menos de tokens de entrada y un 7% menos de salida que la base.
 
+## Sesión 6 — Tools del MCP en el chat
+
+Dominio: `fees`. MCP: el mock (`http://127.0.0.1:8200/mcp`) y, si ya tienes `MCP_URL`, el compartido (`bank-mcp`).
+
+### Tools de tu dominio
+
+| MCP | Tools que lista `dev/mcp/mcp_tools.py` |
+|---|---|
+| Mock | get_charged_fees, get_transactions, request_fee_refund |
+| Compartido | get_charged_fees, get_transactions, request_fee_refund |
+
+### Conversación en `dev/chat.py` (paso 12)
+
+| Prueba | Mensaje | Tool pedida (`→`) | Qué pasó | Primer texto / respuesta completa (ms) |
+|---|---|---|---|---|
+| Consulta de tu dominio | Soy CUS-1001, ¿por qué me cobraron comisiones este mes? ¿Alguna se puede devolver? | get_charged_fees(customer_id=CUS-1001) | El agente obtuvo la información de los cobros, identificó cual podía devolverse (a diferencia del mock) y ofrecía registrar la solicitud de devoluciónx | 16766 ms / 17855 ms|
+| Acción confirmada | Sí, pide la devolución de esa, el motivo es cobro indebido | request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)| Devolvió: NO SE EJECUTA, pendiente de aprobación: {"status": "pendiente_aprobacion", "detail": "Acción sensible: no se ejecutó ni se registró todavía. Dile al cliente que la pediste y que un asesor la va a revizar y eso fue lo que hizo el agente y le dio los tiempos | 31523 ms / 31672 ms |
+| Sin tool que la resuelva | cual es la sede mas cercana | [out_of_scope] | el agente identificó que la pregunta estaba fuera de su ambito y dio recomendaciones de cómo encontrar una respuesta | 12699 ms / 12844 ms |
+| Tool de otro dominio | Soy CUS-1001, ¿puedo subir la línea de mi tarjeta CRD-2001 a 4000?| [out_of_scope] (get_credit_line) | identificó que la pregunta está fuera del ambito de comisiones y mando a centro de ayuda| 12762 ms / 12917 ms |
+
+### ¿El modelo inventó algún dato cuando ninguna tool lo resolvía?
+
+No, trabajó con la información y tools de comisiones que tenía. Si intento ayudar cuando se pregunto sobre una sede, incluso diciendo que utilices google maps. Eso si esta fuera del ambito de comisiones. Cuando se le preguntó sobre otro dominio, mandó a centro de ayuda.
+
+### Conclusión
+
+El agente es capaz de obtener las tools que puede utilizar y solo las que debe usar. Es capaz de determinar en base a la solicitud del usuario si es necesario invocar una tool y como componer la peticion. 
+
+También es capaz de terminar que solicitudes del usuario están fuera de su ambito y es capaz de recomendar en base a la pregunta por donde el cliente debe buscar o continuar con su solicitud.
+
+También puede determinar cuales son sensibles y requieren que un humano esté involucrado.
 
 ## Sesión 7 — Skills, memoria de trabajo y Agent Framework
 
