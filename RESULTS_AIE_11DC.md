@@ -101,12 +101,12 @@ Dominio: `fees`. La misma conversación con los dos runtimes (paso 7).
 
 | | `react` | `agent_framework` |
 |---|---|---|
-| Tools pedidas en la consulta | 3 tools | 3 tools |
+| Tools pedidas en la consulta | get_charged_fees(customer_id=CUS-1001) | get_charged_fees(customer_id=CUS-1001)|
 | La acción sensible quedó **NO SE EJECUTA** | NO SE EJECUTA, pendiente de aprobación "status": "pendiente_aprobacion" | NO SE EJECUTA, pendiente de aprobación "status": "pendiente_aprobacion" |
-| Pregunta de memoria respondida sin `→` | _(anotar)_ | _(anotar)_ |
-| Primer texto (ms) | 19538ms | 22464ms |
-| Respuesta completa (ms) | 19959ms | 22899ms |
-| Tokens (entrada / salida) | 3150/1281 | 3150/2117 |
+| Pregunta de memoria respondida sin `→` | Si, "Su código de cliente es CUS-1001. Usted pidió la devolución de la comisión FEE-4002 (Mantenimiento de cuenta — S/12.00 — 01/10/2026). La solicitud quedó pendiente de aprobación por un asesor." | Si, Su código de cliente es CUS-1001. Usted pidió la devolución de la comisión FEE-4002 — Mantenimiento de cuenta — S/ 12.00 (01/10/2026). La solicitud está pendiente de aprobación por un asesor. |
+| Primer texto (ms) | 16370 ms | 16931 ms  |
+| Respuesta completa (ms) | 16512 ms | 17070 ms |
+| Tokens (entrada / salida) | 2723/1749 | 2924/1430 |
 
 ### ¿La skill frenó la tool de otro dominio?
 
@@ -114,11 +114,12 @@ Mensaje: ¿Dónde hay una agencia en Miraflores?. Respuesta: Agente [out_of_scop
 
 ### Diferencias entre los dos runtimes
 
-El runtime agent_framework al tener memoria puede adaptarse a la pregunta, respondiendo de otra manera, aun respetando las reglas pero con mayor conocimiento.
+A simple vista, el runtime agent framework utiliza mas token y consume mayor tiempo en las respuestas. Al nivel de las respuestas, ambos runtime tienen la misma calidad de respuesta. El detalle mas importante es la memoria, que permite al agent framework reducir cantidad de llamadas a los tools.
 
 ### Conclusión
 
-El tener memoria mejora los agentes al poder dar una respuesta personalizada. Esto tiene desventajas como la respuesta no ser deterministica, pero gracias a los guard se puede tener un agente que siga en parámetros.
+En casos donde importe mas el tiempo de respuesta y consumo de token, un runtime local como react es factible y puede ser beneficioso. Pero si se busca reducción de llamadas y que con la memoria pueda dar mejores respuestas, utilizar en agent framework es superior.
+
 
 ## Sesión 8 — Aprobación humana, validación y reintentos
 
@@ -153,3 +154,4 @@ No, en la trayectoria se ve que el flujo fue respetado
 ### Conclusión
 
 Con la configuración correcta de control humano, se puede tener flujos manejados por IA que realicen operaciones monetarias o sensibles, que terminen con aprobación humana. Se puede tener controles de idempotencia y manejo de errores para evitar duplicados o que no se sepa el estado de la operación.
+
