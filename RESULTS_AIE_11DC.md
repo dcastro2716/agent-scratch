@@ -88,3 +88,37 @@ El runtime agent_framework al tener memoria puede adaptarse a la pregunta, respo
 ### Conclusión
 
 El tener memoria mejora los agentes al poder dar una respuesta personalizada. Esto tiene desventajas como la respuesta no ser deterministica, pero gracias a los guard se puede tener un agente que siga en parámetros.
+
+## Sesión 8 — Aprobación humana, validación y reintentos
+
+Dominio: `fees` (paso 6).
+
+| Caso | Runtime | Mensaje | Qué pasó | Resultado o ID |
+|---|---|---|---|---|
+| Aprobar | `agent_framework` | He registrado la solicitud de devolución RFD-9002 para la comisión FEE-4002 con motivo “cobro indebido”. La solicitud está registrada para que el banco la procese; no se ha aplicado el reembolso.| se pidió aprobación del asesor y al ser aprobada realizó la devolución | resultado: {"id": "RFD-9002", "fee_id": "FEE-4002", "status": "registered", "reason": "cobro indebido"}|
+| Rechazar | `react` | El asesor rechazó la solicitud de devolución; la acción no se ejecutó. | no se ejecuta la acción, en este caso la devolución | rechazada por el asesor: {"status": "rechazada", "detail": "El asesor rechazó la acción: no se ejecutó."} |
+| Error de negocio (`CUS-9999`) | `agent_framework` |  No encuentro el código CUS-9999 en nuestro sistema. Confirme por favor su código de cliente (formato CUS-xxxx) o indique el correcto para que pueda consultar las comisiones. | el mcp devolvio error al invocar get_charged_feeds al no existir el usuario| error: {"error": "El cliente CUS-9999 no existe"}|
+| Input inválido | `agent_framework` | Necesito su código de cliente en formato CUS-xxxx (por ejemplo: CUS-1001). Confirme el código para que pueda consultar las comisiones cobradas. | en este caso no se llego a invocar al mcp, sino fallo en la validacion de la data ya que el codigo del cliente no tiene el formato correcto| (primer texto en 17075 ms, respuesta completa en 17237 ms, 3543 tokens de entrada, 1449 de salida) |
+
+### La trayectoria en el log
+Aprobar
+INFO agent.application.chat_service: trayectoria 18add1a9-74be-447e-bb97-2ace4f7107d6: request_fee_refund pending_approval → respuesta sensitive_action
+INFO agent.application.chat_service: trayectoria 18add1a9-74be-447e-bb97-2ace4f7107d6: decisión del asesor → request_fee_refund ok
+
+Rechazar
+INFO agent.application.chat_service: trayectoria a73ccf5c-80f6-4839-bf46-ecd8b1f2130d: request_fee_refund pending_approval → respuesta sensitive_action
+INFO agent.application.chat_service: trayectoria a73ccf5c-80f6-4839-bf46-ecd8b1f2130d: decisión del asesor → request_fee_refund rejected
+
+Error de negocio 
+INFO agent.application.chat_service: trayectoria 18add1a9-74be-447e-bb97-2ace4f7107d6: get_charged_fees error → respuesta data_query
+
+Input inválido
+INFO agent.application.chat_service: trayectoria 18add1a9-74be-447e-bb97-2ace4f7107d6: sin tools → respuesta data_query
+
+### ¿Algo se ejecutó sin que lo aprobaras?
+
+No, en la trayectoria se ve que el flujo fue respetado
+
+### Conclusión
+
+Con la configuración correcta de control humano, se puede tener flujos manejados por IA que realicen operaciones monetarias o sensibles, que terminen con aprobación humana. Se puede tener controles de idempotencia y manejo de errores para evitar duplicados o que no se sepa el estado de la operación.
