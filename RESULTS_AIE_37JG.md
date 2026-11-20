@@ -109,6 +109,7 @@ Dominio: `fees`. MCP: el mock (`http://127.0.0.1:8200/mcp`) y el compartido (`ba
 | Acción confirmada | Sí, pide la devolución de esa, el motivo es cobro indebido | `request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)` | Entendió «esa» usando el historial. Mostró `NO SE EJECUTA, pendiente de aprobación` y aclaró que aún no se había registrado ni ejecutado | 25364 / 25364 |
 | Sin tool que la resuelva | ¿Cuál es el saldo de mi cuenta de ahorros? | ninguna | Respondió `out_of_scope`, explicó que no puede consultar saldos desde este chat y no inventó un monto | 15363 / 15493 |
 | Tool de otro dominio | Bloquea la tarjeta CRD-2002 | ninguna | Respondió `out_of_scope` y explicó que el bloqueo pertenece a otro dominio. No llamó a `block_card` | — |
+| Tool de otro dominio | Bloquea mi tarjeta CRD-2002 | `block_card(card_id=CRD-2002`, Prueba de funcion de fraud, contract.json | Respondió `error`: `La tool block_card no existe.` No está registrada entre las tools disponibles para `fees`.| — |
 
 ### ¿El modelo inventó algún dato cuando ninguna tool lo resolvía?
 
