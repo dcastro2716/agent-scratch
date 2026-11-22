@@ -61,3 +61,35 @@ G-Eval sirve para investigar el motivo de una nota porque conserva `reasoning`. 
 | Juez Azure | ✅ | ❌ | ✅ | ✅ | ❌ |
 
 Ninguna corrida cumple todos los controles. Para la opción elegida (`TOP_K=3`), falta elevar hechos de 0.74 a 0.75 o más. Cambiaría el prompt para obligar a responder cada hecho clave recuperado sin añadir inferencias, y revisaría los casos que fallan por formato o por omitir condiciones. En particular, corregiría `fees-AIE13EC` para recuperar y citar la sección de `itf-tax.md` que dice que los abonos de remuneraciones no pagan ITF. Para eliminar citas prohibidas en las demás configuraciones, mantendría `TOP_K=3` y reforzaría el filtro de fuentes vencidas o prohibidas antes de generar la respuesta.
+
+---
+
+## Sesión 6 — Tools del MCP en el chat
+
+Dominio: `fees`. MCP: mock (http://127.0.0.1:8200/mcp) y compartido.
+
+### Tools de tu dominio
+
+| MCP | Tools que lista `dev/mcp/mcp_tools.py` |
+| :--- | :--- |
+| Mock | `get_charged_fees(customer_id)` (consulta); `get_transactions(customer_id, limit)` (consulta); `request_fee_refund(fee_id, reason)` (acción sensible). |
+| Compartido | `get_charged_fees(customer_id)` (consulta); `get_transactions(customer_id, limit)` (consulta); `request_fee_refund(fee_id, reason)` (acción sensible). |
+
+La lista del MCP compartido se anota según el contrato que replica el mock; ambos filtran las tools por dominio y en `fees` quedan visibles estas tres.
+
+### Conversación en `dev/chat.py` (paso 12)
+
+| Prueba | Mensaje | Tool pedida (`→`) | Qué pasó | Primer texto / respuesta completa (ms) |
+| :--- | :--- | :--- | :--- | :--- |
+| Consulta de tu dominio | Soy CUS-1001, ¿por qué me cobraron comisiones este mes? ¿Alguna se puede devolver? | `get_charged_fees(customer_id=CUS-1001)` | Consultó dos cargos: FEE-4001 no devolvible y FEE-4002 devolvible. El agente explicó los cargos, citó la política y ofreció solicitar la devolución de FEE-4002. | 16,226 / 16,543 |
+| Acción confirmada | Sí, pide la devolución de esa, el motivo es cobro indebido | `request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)` | La tool no ejecutó ni registró la acción: quedó pendiente de aprobación. | 20,147 / 20,409 |
+| Sin tool que la resuelva | ¿Cuál es el saldo de mi cuenta de ahorros? | — | Respondió `out_of_scope`: indicó que no podía consultar saldos y remitió a la app, banca por internet, cajero, atención al cliente o agencia. | 10,167 / 10,310 |
+| Tool de otro dominio | ¿Cuál es el número de la línea de emergencias? | — | Respondió `out_of_scope`: no dio un número y sugirió consultar la web o app del banco, la tarjeta o una sucursal. | 10,906 / 11,062 |
+
+### ¿El modelo inventó algún dato cuando ninguna tool lo resolvía?
+
+No en las dos consultas sin tool: no inventó un saldo ni un número de emergencias.
+
+### Conclusión
+
+El agente llamó a las tools del dominio `fees`, evitó responder con datos inventados cuando la consulta estaba fuera de alcance y marcó la devolución como pendiente de aprobación en el resultado de la tool.
