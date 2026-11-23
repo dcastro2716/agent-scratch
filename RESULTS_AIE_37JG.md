@@ -157,4 +157,53 @@ En estas ejecuciones, React respondió antes a la consulta inicial y a la petici
 
 Ambos runtimes cumplieron los comportamientos que probé: consultaron las tools de mi dominio, dejaron la devolución pendiente de aprobación, respondieron la pregunta de memoria sin tools y rechazaron el bloqueo de tarjeta. También entendieron «esa» como FEE-4002 sin volver a consultar las comisiones.
 
-En mi corrida, React fue más rápido en la consulta inicial y en el rechazo del bloqueo; Agent Framework respondió antes a la confirmación y a la pregunta de memoria. Sumando los cuatro mensajes, React consumió 15063 tokens de entrada y 19105 de salida, mientras que Agent Framework consumió 15362 de entrada y 15068 de salida. Por estos resultados no puedo decir que uno sea siempre más rápido o más económico. 
+En mi corrida, React fue más rápido en la consulta inicial y en el rechazo del bloqueo; Agent Framework respondió antes a la confirmación y a la pregunta de memoria. Sumando los cuatro mensajes, React consumió 15063 tokens de entrada y 19105 de salida, mientras que Agent Framework consumió 15362 de entrada y 15068 de salida. Por estos resultados no puedo decir que uno sea siempre más rápido o más económico.
+
+## Sesión 8 — Aprobación humana, validación y reintentos
+
+Dominio: `fees`
+
+| Caso | Runtime | Mensaje | Qué pasó | Resultado o ID |
+|---|---|---|---|---|
+| Aprobar | `agent_framework` | «Soy CUS-1001, ¿por qué me cobraron comisiones este mes? ¿Alguna se puede devolver?» y «Sí, pide la devolución de esa, el motivo es cobro indebido» | La solicitud de devolución para la comisión FEE-4002 está registrada (RFD-9001) y queda para que el banco la procese; no está aplicada. | Resultado: `{"id": "RFD-9001", "fee_id": "FEE-4002", "status": "registered", "reason": "cobro indebido"}` |
+| Rechazar | `react` | «Soy CUS-1001, ¿por qué me cobraron comisiones este mes? ¿Alguna se puede devolver?» y «Sí, pide la devolución de esa, el motivo es cobro indebido» | La solicitud de devolución de FEE-4002 fue rechazada por el asesor; queda registrada para que el banco la procese, no aplicada. | Rechazada por el asesor: `{"status": "rechazada", "detail": "El asesor rechazó la acción: no se ejecutó."}` |
+| Error de negocio (`CUS-9999`) | `agent_framework` | «Soy CUS-9999, ¿qué comisiones me cobraron?» | No encuentro al cliente CUS-9999 en nuestro sistema. ¿Puedes confirmar tu código de cliente correcto (CUS-XXXX) para poder mostrarte las comisiones cobradas? Si prefieres, también puedo revisar tus últimos movimientos para identificar cargos y comisiones. | Error: `{"error": "El cliente CUS-9999 no existe"}` |
+| Input inválido | `agent_framework` | «Mi número de cliente es 1001, ¿qué comisiones me cobraron?» | Estas son tus comisiones registradas:<br>- FEE-4001 (18/10/2026): Retiro en cajero de otro banco — S/ 6.50. No es devolvible.<br>- FEE-4002 (01/10/2026): Mantenimiento de cuenta — S/ 12.00. Sí es devolvible.<br>¿Quieres que inicie la devolución de alguna de estas comisiones? Si es así, indica el código (p. ej., FEE-4002) y el motivo. | Mostró las comisiones; no pidió corregir el formato |
+
+### La trayectoria en el log
+
+#### Log de Aprobar
+
+```text
+INFO agent.application.chat_service: trayectoria 110c1830-687d-4bc1-9c40-920309c699c1: get_charged_fees ok → respuesta product_question
+INFO agent.application.chat_service: trayectoria 110c1830-687d-4bc1-9c40-920309c699c1: request_fee_refund pending_approval → respuesta sensitive_action
+INFO agent.application.chat_service: trayectoria 110c1830-687d-4bc1-9c40-920309c699c1: decisión del asesor → request_fee_refund ok
+```
+
+#### Log de Rechazar
+
+```text
+INFO agent.application.chat_service: trayectoria d6cd2dd4-1325-4476-844c-364e9a332d58: get_charged_fees ok → get_transactions ok → respuesta product_question
+INFO agent.application.chat_service: trayectoria d6cd2dd4-1325-4476-844c-364e9a332d58: request_fee_refund pending_approval → respuesta sensitive_action
+INFO agent.application.chat_service: trayectoria d6cd2dd4-1325-4476-844c-364e9a332d58: decisión del asesor → request_fee_refund rejected
+```
+
+#### Log de Error de negocio
+
+```text
+INFO agent.application.chat_service: trayectoria 8bdeaaf9-8a11-4064-b6e5-6eab9a6ed792: get_charged_fees error → respuesta data_query
+```
+
+#### Log de Input Inválido
+
+```text
+INFO agent.application.chat_service: trayectoria 0bad8c3d-b3be-4618-a41a-e6e756c7508e: get_charged_fees ok → respuesta data_query
+```
+
+### ¿Algo se ejecutó sin que lo aprobaras?
+
+No se ejecutó la solicitud de devolución sin la aprobación del asesor. Las consultas de comisiones y movimientos sí se hicieron sin pedir aprobación.
+
+### Conclusión
+
+Con estas pruebas comprobe que el agente espera la decisión del asesor antes de registrar una devolución. Si se aprueba, registra la solicitud, si se rechaza, no la ejecuta. Tambien avisa cuando el cliente no existe. En general, el control humano funciono.
