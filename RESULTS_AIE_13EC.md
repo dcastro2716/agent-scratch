@@ -122,3 +122,45 @@ En los dos runtimes la tool bloqueó la acción sensible. Sin embargo, ambos age
 ### Conclusión
 
 Los dos runtimes respetaron el límite de dominio y la aprobación bloqueó la ejecución de la tool sensible. React aprovechó mejor los datos de la consulta inicial; Agent Framework recordó mejor el estado de la devolución y tuvo menor latencia. Ambos deben comunicar con precisión que la solicitud aún no se ejecutó ni quedó registrada.
+
+---
+
+## Sesión 8 — Aprobación humana, validación y reintentos
+
+Dominio: `fees` (paso 6).
+
+| Caso | Runtime | Mensaje | Qué pasó | Resultado o ID |
+|---|---|---|---|---|
+| Aprobar | `agent_framework` | «Sí, pide la devolución de esa, el motivo es cobro indebido» | `request_fee_refund` quedó pendiente hasta que el asesor respondió `s`; entonces se registró la solicitud. Todavía no se aplicó el abono. | `call-befdb363` → `RFD-9001` (`registered`, `FEE-4002`) |
+| Rechazar | `react` | «Sí, pide la devolución de esa, el motivo es cobro indebido» | La tool quedó pendiente de aprobación. El asesor respondió `n`; se rechazó y no se aplicó la devolución. | `call_l9XEU2CEvLYEmgZCIDgLCiE6`; `rechazada` |
+| Error de negocio (`CUS-9999`) | `react` | «Soy CUS-9999, ¿qué comisiones me cobraron?» | `get_charged_fees` devolvió que el cliente no existe. El agente pidió confirmar el código y no inventó cargos. | `{"error": "El cliente CUS-9999 no existe"}` |
+| Input inválido | `react`  | «Mi número de cliente es 1001, ¿qué comisiones me cobraron?» | No llamó a ninguna tool. Pidió el código en formato `CUS-####` y recordó no compartir datos sensibles. | Sin tool ni ID |
+
+### La trayectoria en el log
+
+#### Aprobar, con Agent Framework
+    INFO agent.application.chat_service: trayectoria 5d6c35b8-517f-4261-8d0f-e15e86b8c57e: get_charged_fees ok → respuesta product_question
+    INFO agent.application.chat_service: trayectoria 5d6c35b8-517f-4261-8d0f-e15e86b8c57e: request_fee_refund pending_approval → respuesta sensitive_action
+    INFO agent.application.chat_service: trayectoria 5d6c35b8-517f-4261-8d0f-e15e86b8c57e: decisión del asesor → request_fee_refund ok
+
+#### Rechazar con ciclo propio
+
+    INFO agent.application.chat_service: trayectoria ea0a1ff4-5b5e-4056-a857-373e71610099: get_charged_fees ok → respuesta data_query
+    INFO agent.application.chat_service: trayectoria ea0a1ff4-5b5e-4056-a857-373e71610099: request_fee_refund pending_approval → respuesta sensitive_action
+    INFO agent.application.chat_service: trayectoria ea0a1ff4-5b5e-4056-a857-373e71610099: decisión del asesor → request_fee_refund rejected
+
+#### Un error de negocio
+
+    INFO agent.application.chat_service: trayectoria ea0a1ff4-5b5e-4056-a857-373e71610099: get_charged_fees error → respuesta data_query
+
+#### Input inválido
+
+    INFO agent.application.chat_service: trayectoria ea0a1ff4-5b5e-4056-a857-373e71610099: sin tools → respuesta data_query
+
+### ¿Algo se ejecutó sin que lo aprobaras?
+
+No. La devolución aprobada se registró solo después de que el asesor respondió `s`. En el otro caso, el asesor respondió `n` y la acción fue rechazada. El error de negocio y el input inválido tampoco ejecutaron una acción sensible.
+
+### Conclusión
+
+La aprobación humana controló la ejecución: `FEE-4002` se registró como `RFD-9001` tras la aprobación y no se aplicó aún; el rechazo no ejecutó la devolución. El error de `CUS-9999` se comunicó sin inventar cargos, y el número `1001` fue rechazado como input inválido antes de llamar a una tool. 
