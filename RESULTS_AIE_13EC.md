@@ -93,3 +93,32 @@ No en las dos consultas sin tool: no inventó un saldo ni un número de emergenc
 ### Conclusión
 
 El agente llamó a las tools del dominio `fees`, evitó responder con datos inventados cuando la consulta estaba fuera de alcance y marcó la devolución como pendiente de aprobación en el resultado de la tool.
+
+---
+
+## Sesión 7 — Skills, memoria de trabajo y Agent Framework
+
+Dominio: `fees`. La misma conversación con los dos runtimes (paso 7).
+
+| | `react` | `agent_framework` |
+|---|---|---|
+| Tools pedidas en la consulta | 2: `get_charged_fees` y `request_fee_refund` | 2: `get_charged_fees` y `request_fee_refund` |
+| La acción sensible quedó **NO SE EJECUTA** | Sí. La tool indicó que no se ejecutó ni registró; el agente afirmó que la solicitud ya estaba registrada. | Sí. La tool indicó que no se ejecutó ni registró; el agente dijo que la había solicitado, aunque aclaró que seguía pendiente y no abonada. |
+| Pregunta de memoria respondida sin `→` | Sí. Recordó los dos cargos, pero no el estado de la solicitud de devolución. | Sí. Recordó los cargos y que la solicitud de devolución seguía pendiente. |
+| Primer texto (ms) | 18,270 (consulta inicial) | 13,865 (consulta inicial) |
+| Respuesta completa (ms) | 18,564 (consulta inicial) | 14,144 (consulta inicial) |
+| Tokens (entrada / salida) | 3,150 / 1,930 (consulta inicial) | 3,150 / 1,353 (consulta inicial) |
+
+### ¿La skill frenó la tool de otro dominio?
+
+Mensaje: «¿Cuál es el clima del día de hoy?» Respuesta: sí, en ambos runtimes; lo clasificaron como `out_of_scope` y no hubo llamada de tool (`→`). React redirigió a temas de comisiones; Agent Framework, a comisiones, cargos, ITF o devoluciones.
+
+### Diferencias entre los dos runtimes
+
+React usó el resultado de `get_charged_fees` para explicar los cargos y señalar cuál era devolvible. Agent Framework llamó a la misma tool, pero respondió con información general de la política y no identificó los cargos ni sus montos. En la respuesta final sin tool, ambos recordaron los cargos; solo Agent Framework mencionó que la devolución estaba pendiente.
+
+En los dos runtimes la tool bloqueó la acción sensible. Sin embargo, ambos agentes describieron la solicitud como pedida pese a que el resultado decía que todavía no se había ejecutado ni registrado. La respuesta de React fue más tajante al afirmar que ya estaba registrada. En la consulta inicial, Agent Framework respondió 4,420 ms antes y generó 577 tokens menos que React.
+
+### Conclusión
+
+Los dos runtimes respetaron el límite de dominio y la aprobación bloqueó la ejecución de la tool sensible. React aprovechó mejor los datos de la consulta inicial; Agent Framework recordó mejor el estado de la devolución y tuvo menor latencia. Ambos deben comunicar con precisión que la solicitud aún no se ejecutó ni quedó registrada.
