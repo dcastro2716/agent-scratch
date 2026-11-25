@@ -8,8 +8,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from agent.application.chat_service import ChatService
 from agent.domain.errors import AgentError, ErrorKind
-from agent.domain.models import AgentTurn, AnswerDelta, IntentDetected, TurnEvent
-from agent.infrastructure.api.schemas import ChatRequest, ChatResponse, ErrorResponse
+from agent.domain.models import AgentTurn, AnswerDelta, IntentDetected, ToolCall, ToolResult, TurnEvent
+from agent.infrastructure.api.schemas import ActionDecision, ChatRequest, ChatResponse, ErrorResponse
 
 log = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ ERROR_STATUS = {
     ErrorKind.RATE_LIMIT: 429,
     ErrorKind.INVALID_OUTPUT: 502,
     ErrorKind.UPSTREAM: 502,
+    ErrorKind.NOT_FOUND: 404,
 }
 ERROR_RESPONSES = {status: {"model": ErrorResponse} for status in set(ERROR_STATUS.values())}
 
@@ -42,11 +43,18 @@ def build_router(chat_service: ChatService) -> APIRouter:
 
     @router.post("/chat/stream", responses=ERROR_RESPONSES, response_class=StreamingResponse)
     def chat_stream(chat_request: ChatRequest) -> StreamingResponse:
-        """La misma conversación que /chat, en Server-Sent Events: start, intent, delta…, y al final end o error."""
+        """La misma conversación que /chat, en Server-Sent Events: start, tool_call y tool_result por cada tool, intent,
+        delta…, y al final end o error."""
         session_id = chat_request.session_id or uuid4()
         # reescribir y buscar ocurren en esta línea: si fallan, la API responde con su código HTTP como en /chat
         events = chat_service.handle_stream(str(session_id), chat_request.message)
         return StreamingResponse(_server_sent_events(session_id, events), media_type="text/event-stream")
+
+    @router.post("/chat/actions", responses=ERROR_RESPONSES)
+    def decide(action: ActionDecision) -> ChatResponse:
+        """S8: el asesor aprueba o rechaza la acción sensible pendiente. 404 si la sesión no tiene una con ese id."""
+        turn = chat_service.resolve(str(action.session_id), action.action_id, action.decision)
+        return _chat_response(action.session_id, turn)
 
     return router
 
@@ -58,6 +66,8 @@ def _chat_response(session_id: UUID, turn: AgentTurn) -> ChatResponse:
         answer=turn.reply.answer,
         usage=turn.usage,
         citations=turn.citations,
+        tools=turn.tools,
+        pending_action=turn.pending_action,
     )
 
 
@@ -66,6 +76,10 @@ def _server_sent_events(session_id: UUID, events: Iterator[TurnEvent]) -> Iterat
     try:
         for event in events:
             match event:
+                case ToolCall():
+                    yield _event("tool_call", event.model_dump(mode="json"))
+                case ToolResult(call=call):
+                    yield _event("tool_result", {"id": call.id, "name": call.name, "status": event.status, "content": event.content})
                 case IntentDetected(intent=intent):
                     yield _event("intent", {"intent": intent})
                 case AnswerDelta(text=text):

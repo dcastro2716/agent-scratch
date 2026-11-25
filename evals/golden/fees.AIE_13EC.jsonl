@@ -1,0 +1,1 @@
+{"id":"fees-AIE13EC","type":"answerable","history":[],"question":"¿Me cobran ITF si recibo mi sueldo en la cuenta?","expected_intent":"product_question","expected_sources":["itf-tax.md"],"forbidden_sources":[],"key_facts":["Los abonos de remuneraciones no pagan ITF"]}
