@@ -154,4 +154,3 @@ No, en la trayectoria se ve que el flujo fue respetado
 ### Conclusión
 
 Con la configuración correcta de control humano, se puede tener flujos manejados por IA que realicen operaciones monetarias o sensibles, que terminen con aprobación humana. Se puede tener controles de idempotencia y manejo de errores para evitar duplicados o que no se sepa el estado de la operación.
-
