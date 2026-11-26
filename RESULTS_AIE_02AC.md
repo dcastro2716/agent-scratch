@@ -220,26 +220,26 @@ Equipo `team-01`. Dominio `fees` (comisiones).
 
 | Comprobación | Resultado |
 |---|---|
-| Tests en el contenedor (paso 3) | Docker construyó `agent:test` (`LOGS.txt` L65–97). `docker run --rm agent:test` terminó con 139 pruebas aprobadas y 5 omitidas en 9.14 s (L98–101). |
-| Acción aprobada después de reiniciar `uvicorn` (paso 2, Cosmos DB) | Verificación parcial. `uvicorn` arrancó con Cosmos DB (`workshop/team-01`) como almacén de conversaciones y `GET /health` devolvió HTTP 200 en local (`LOGS.txt` L103–120). Falta la evidencia de una acción pendiente antes del reinicio y de su aprobación posterior en la misma sesión. |
-| Imagen desplegada (`team-NN/agent:<sha>`) | `acrworkshopjsu3.azurecr.io/team-01/agent:3b3d309bbab5361316ad4bd72f712a160530947c`. Referencia confirmada mediante la consulta de la revisión en Azure Container Apps. `LOGS.txt` L33 identifica la revisión. |
-| Revisión activa y duración del job `deploy` | La revisión `ca-agent-chat-01--0000003` tenía una réplica en ejecución (`LOGS.txt` L31–33). La duración del job queda pendiente del registro de GitHub Actions. |
-| `/health` del agente desplegado | La comprobación inicial devolvió `ok` (`LOGS.txt` L2). Un intento posterior de `uv run python dev/chat.py` agotó el tiempo de espera de 30 s mientras esperaba la respuesta de `/health` (trazado de terminal compartido). |
-| Respuesta con `Fuentes:` contra Azure (y su tiempo en ms) | La respuesta sobre comisiones citó `fee-refund-policy.docx`. Primer texto a los 14 390 ms y respuesta completa a los 14 754 ms (`LOGS.txt` L7–16). |
-| Acción aprobada contra Azure, con su `resultado:` | El asesor aprobó `request_fee_refund` y recibió `{"id": "RFD-9002", "fee_id": "FEE-4002", "status": "registered", "reason": "cobro indebido"}` (`LOGS.txt` L26–28). `POST /chat/actions` devolvió HTTP 200 (L63). |
+| Tests en el contenedor (paso 3) | Docker construyó `agent:test`. `docker run --rm agent:test` terminó con 139 pruebas aprobadas y 5 omitidas en 9.14 s (L98–101). |
+| Acción aprobada después de reiniciar `uvicorn` (paso 2, Cosmos DB) | Verificación parcial. `uvicorn` arrancó con Cosmos DB (`workshop/team-01`) como almacén de conversaciones y `GET /health` devolvió HTTP 200 en local. Falta la evidencia de una acción pendiente antes del reinicio y de su aprobación posterior en la misma sesión. |
+| Imagen desplegada (`team-NN/agent:<sha>`) | `acrworkshopjsu3.azurecr.io/team-01/agent:3b3d309bbab5361316ad4bd72f712a160530947c`. Referencia confirmada mediante la consulta de la revisión en Azure Container Apps. Logs identifica la revisión. |
+| Revisión activa y duración del job `deploy` | La revisión `ca-agent-chat-01--0000003` tenía una réplica en ejecución. La duración del job queda pendiente del registro de GitHub Actions. |
+| `/health` del agente desplegado | La comprobación inicial devolvió `ok`. Un intento posterior de `uv run python dev/chat.py` agotó el tiempo de espera de 30 s mientras esperaba la respuesta de `/health` (trazado de terminal compartido). |
+| Respuesta con `Fuentes:` contra Azure (y su tiempo en ms) | La respuesta sobre comisiones citó `fee-refund-policy.docx`. Primer texto a los 14 390 ms y respuesta completa a los 14 754 ms. |
+| Acción aprobada contra Azure, con su `resultado:` | El asesor aprobó `request_fee_refund` y recibió `{"id": "RFD-9002", "fee_id": "FEE-4002", "status": "registered", "reason": "cobro indebido"}`. `POST /chat/actions` devolvió HTTP 200. |
 
 ### Qué pone Azure y qué pone la imagen
 
 - Azure, vía Terraform, aporta `AZURE_OPENAI_ENDPOINT`, `AZURE_CLIENT_ID`, `TEAM_ID`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER`, `SEARCH_ENDPOINT`, `SEARCH_INDEX`, `MCP_URL`, `MCP_SCOPE` y `KEY_VAULT_URI`.
 - La imagen define `DOMAIN`, `FOUNDRY_AUTH_PROVIDER`, `KNOWLEDGE_BASE`, `AGENT_RUNTIME`, `PATH` y `PYTHONUNBUFFERED`. El comando de arranque deriva `FOUNDRY_ENDPOINT` de `AZURE_OPENAI_ENDPOINT` si hace falta.
 
-Fuentes de configuración: `devops/DESPLIEGUE.md` L39–53 y `devops/Dockerfile` L52–64.
+Fuentes de configuración: `devops/DESPLIEGUE.md` y `devops/Dockerfile`.
 
 ### Problemas que encontraste y cómo los resolviste
 
-Antes de la aprobación, el agente dijo que ya había registrado la devolución, aunque la herramienta seguía en estado `pendiente_aprobacion` (`LOGS.txt` L19–20). El asesor aprobó la acción y la herramienta confirmó el registro con el ID `RFD-9002` (L26–28). No consta una corrección del mensaje prematuro.
+Antes de la aprobación, el agente dijo que ya había registrado la devolución, aunque la herramienta seguía en estado `pendiente_aprobacion`. El asesor aprobó la acción y la herramienta confirmó el registro con el ID `RFD-9002`. No consta una corrección del mensaje prematuro.
 
-En un intento posterior, `dev/chat.py` agotó el tiempo de espera al consultar `/health` por HTTPS. En la prueba local del paso 2, se levantó `uvicorn` en `127.0.0.1:8000` y `GET /health` devolvió HTTP 200 (`LOGS.txt` L104–106 y L117–120). La causa del timeout por HTTPS quedó sin determinar.
+En un intento posterior, `dev/chat.py` agotó el tiempo de espera al consultar `/health` por HTTPS. En la prueba local del paso 2, se levantó `uvicorn` en `127.0.0.1:8000` y `GET /health` devolvió HTTP 200. La causa del timeout por HTTPS quedó sin determinar.
 
 ### Conclusión
 
