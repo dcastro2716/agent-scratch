@@ -212,3 +212,35 @@ No. En ambos runtimes, la acción sensible (`request_fee_refund`) siempre pasó 
 ### Conclusión
 
 El control humano funciona correctamente en ambos runtimes. Las acciones sensibles (`request_fee_refund`) siempre quedan en estado `NO SE EJECUTA, pendiente de aprobación` hasta que el asesor decide: si aprueba, se ejecuta y devuelve un ID de solicitud (`RFD-9001`); si rechaza, no se ejecuta y el agente informa al cliente. Los errores de negocio (cliente inexistente) se manejan sin inventar datos: el agente comunica el error y pide verificar el código. No se observó ninguna ejecución no autorizada. El flujo human-in-the-loop garantiza que ninguna operación con impacto financiero (devoluciones) se concrete sin supervisión humana explícita.
+
+
+## Sesión 9 — Despliegue en Azure
+
+Equipo `team-01`. Dominio `fees` (comisiones).
+
+| Comprobación | Resultado |
+|---|---|
+| Tests en el contenedor (paso 3) | Docker construyó `agent:test`. `docker run --rm agent:test` terminó con 139 pruebas aprobadas y 5 omitidas en 9.14 s (L98–101). |
+| Acción aprobada después de reiniciar `uvicorn` (paso 2, Cosmos DB) | Verificación parcial. `uvicorn` arrancó con Cosmos DB (`workshop/team-01`) como almacén de conversaciones y `GET /health` devolvió HTTP 200 en local. Falta la evidencia de una acción pendiente antes del reinicio y de su aprobación posterior en la misma sesión. |
+| Imagen desplegada (`team-NN/agent:<sha>`) | `acrworkshopjsu3.azurecr.io/team-01/agent:3b3d309bbab5361316ad4bd72f712a160530947c`. Referencia confirmada mediante la consulta de la revisión en Azure Container Apps. Logs identifica la revisión. |
+| Revisión activa y duración del job `deploy` | La revisión `ca-agent-chat-01--0000003` tenía una réplica en ejecución. La duración del job queda pendiente del registro de GitHub Actions. |
+| `/health` del agente desplegado | La comprobación inicial devolvió `ok`. Un intento posterior de `uv run python dev/chat.py` agotó el tiempo de espera de 30 s mientras esperaba la respuesta de `/health` (trazado de terminal compartido). |
+| Respuesta con `Fuentes:` contra Azure (y su tiempo en ms) | La respuesta sobre comisiones citó `fee-refund-policy.docx`. Primer texto a los 14 390 ms y respuesta completa a los 14 754 ms. |
+| Acción aprobada contra Azure, con su `resultado:` | El asesor aprobó `request_fee_refund` y recibió `{"id": "RFD-9002", "fee_id": "FEE-4002", "status": "registered", "reason": "cobro indebido"}`. `POST /chat/actions` devolvió HTTP 200. |
+
+### Qué pone Azure y qué pone la imagen
+
+- Azure, vía Terraform, aporta `AZURE_OPENAI_ENDPOINT`, `AZURE_CLIENT_ID`, `TEAM_ID`, `APPLICATIONINSIGHTS_CONNECTION_STRING`, `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER`, `SEARCH_ENDPOINT`, `SEARCH_INDEX`, `MCP_URL`, `MCP_SCOPE` y `KEY_VAULT_URI`.
+- La imagen define `DOMAIN`, `FOUNDRY_AUTH_PROVIDER`, `KNOWLEDGE_BASE`, `AGENT_RUNTIME`, `PATH` y `PYTHONUNBUFFERED`. El comando de arranque deriva `FOUNDRY_ENDPOINT` de `AZURE_OPENAI_ENDPOINT` si hace falta.
+
+Fuentes de configuración: `devops/DESPLIEGUE.md` y `devops/Dockerfile`.
+
+### Problemas que encontraste y cómo los resolviste
+
+Antes de la aprobación, el agente dijo que ya había registrado la devolución, aunque la herramienta seguía en estado `pendiente_aprobacion`. El asesor aprobó la acción y la herramienta confirmó el registro con el ID `RFD-9002`. No consta una corrección del mensaje prematuro.
+
+En un intento posterior, `dev/chat.py` agotó el tiempo de espera al consultar `/health` por HTTPS. En la prueba local del paso 2, se levantó `uvicorn` en `127.0.0.1:8000` y `GET /health` devolvió HTTP 200. La causa del timeout por HTTPS quedó sin determinar.
+
+### Conclusión
+
+El contenedor de pruebas tuvo 139 pruebas aprobadas y 5 omitidas. En la prueba inicial en Azure, el agente respondió a `/health`, citó la política de devoluciones y registró la solicitud tras la aprobación del asesor. Un intento posterior de `/health` terminó por tiempo de espera. En local, `uvicorn` arrancó con Cosmos DB como almacén de conversaciones y respondió HTTP 200 a `/health`. Quedó pendiente comprobar que una acción pendiente se conserva tras reiniciar `uvicorn` y se puede aprobar en la misma sesión, así como verificar la duración del job `deploy`.
