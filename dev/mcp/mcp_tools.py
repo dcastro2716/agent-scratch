@@ -1,55 +1,78 @@
-"""Lista o llama tools del servidor MCP que dice el .env (MCP_URL y DOMAIN): el mock local o el compartido.
-
-Uso:
-  uv run python dev/mcp/mcp_tools.py                                              lista las tools de tu dominio
-  uv run python dev/mcp/mcp_tools.py get_transactions customer_id=CUS-1001 limit=2   llama una tool
-"""
-
 import asyncio
+import contextvars
 import json
-import sys
+from collections.abc import Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-from fastmcp import Client
+from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
+from mcp.types import Tool
 
-from agent.infrastructure.config.settings import Settings
+from agent.domain.errors import AgentError, ErrorKind
+from agent.domain.models import ToolCall, ToolDefinition, ToolResult, ToolStatus
 
+DOMAIN_HEADER = "X-Bank-Domain"
 
-def argument(value: str):
-    """customer_id=CUS-1001 → texto; limit=2 → número; los valores JSON se leen como JSON."""
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        return value
+TokenProvider = Callable[[], str]  # devuelve un token de Entra vigente; lo renueva solo
 
 
-async def main(args: list[str]) -> int:
-    settings = Settings()
-    headers = {"X-Bank-Domain": settings.domain}
-    if settings.mcp.scope:  # el MCP compartido pide un token de Entra: az login
-        token = get_bearer_token_provider(DefaultAzureCredential(), settings.mcp.scope)()
-        headers["Authorization"] = f"Bearer {token}"
-    transport = StreamableHttpTransport(settings.mcp.url, headers=headers)
-    async with Client(transport) as client:
-        if not args:
-            tools = await client.list_tools()
-            print(f"{settings.mcp.url} · {settings.domain} · {len(tools)} tools")
-            for tool in sorted(tools, key=lambda tool: tool.name):
-                kind = "consulta" if tool.annotations and tool.annotations.read_only_hint else "acción sensible"
-                print(f"  {tool.name:<30} {kind:<16} {', '.join(tool.input_schema.get('properties', {}))}")
-            return 0
-        name, pairs = args[0], dict(pair.split("=", 1) for pair in args[1:])
+def mcp_client(server: str | FastMCP, domain: str = "", token: TokenProvider | None = None) -> Client:
+    """Por HTTP, el header X-Bank-Domain le dice al MCP el dominio del agente: solo ve sus tools. En memoria, todas.
+
+    Con token (el MCP compartido), cada conexión manda un Bearer recién pedido. Sin token (el mock), no manda ninguno.
+    """
+    if isinstance(server, str):
+        headers = {DOMAIN_HEADER: domain} if domain else {}
+        if token:
+            headers["Authorization"] = f"Bearer {token()}"
+        return Client(StreamableHttpTransport(server, headers=headers or None))
+    return Client(server)
+
+
+class McpTools:
+    """Implementa Tools con un servidor MCP: el mock local o el compartido, según MCP_URL. DOMAIN decide qué tools ve."""
+
+    def __init__(self, server: str | FastMCP, domain: str = "", token: TokenProvider | None = None) -> None:
+        self.server = server  # la URL del MCP; en los tests, el servidor en memoria
+        self.domain = domain
+        self.token = token
+        self._definitions: list[ToolDefinition] | None = None
+
+    def definitions(self) -> list[ToolDefinition]:
+        if self._definitions is None:  # se piden una vez, al arrancar: las tools no cambian mientras corre el agente
+            self._definitions = [_definition(tool) for tool in self._run(lambda client: client.list_tools())]
+        return self._definitions
+
+    def call(self, call: ToolCall) -> ToolResult:
         try:
-            result = await client.call_tool(name, {key: argument(value) for key, value in pairs.items()})
-        except ToolError as error:
-            print(f"  Error de la tool: {error}")
-            return 1
-        print(json.dumps(result.structured_content, ensure_ascii=False, indent=2))
-        return 0
+            result = self._run(lambda client: client.call_tool(call.name, call.arguments))
+        except ToolError as error:  # error de negocio: el modelo lo lee y se lo explica al cliente
+            content = json.dumps({"error": str(error)}, ensure_ascii=False)
+            return ToolResult(call=call, status=ToolStatus.ERROR, content=content)
+        return ToolResult(call=call, status=ToolStatus.OK, content=json.dumps(result.structured_content, ensure_ascii=False))
+
+    def _run[Result](self, action: Callable[[Client], Awaitable[Result]]) -> Result:
+        async def run() -> Result:
+            async with mcp_client(self.server, self.domain, self.token) as client:
+                return await action(client)
+
+        # el agente es síncrono, pero uvicorn lo arma dentro de su event loop: el cliente MCP corre en un hilo con el suyo.
+        # ponytail: una conexión por llamada; si un turno usa muchas tools, mantener una sesión abierta
+        try:
+            with ThreadPoolExecutor(max_workers=1) as thread:
+                # S10: el hilo hereda el contexto (la traza del turno): sin esto, las llamadas HTTP al MCP quedan sueltas
+                return thread.submit(contextvars.copy_context().run, asyncio.run, run()).result()
+        except ToolError:
+            raise
+        except Exception as error:  # conexión o timeout: el MCP no está disponible
+            raise AgentError(ErrorKind.UPSTREAM, f"no se pudo llamar al MCP: {type(error).__name__}") from error
 
 
-if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.exit(asyncio.run(main(sys.argv[1:])))
+def _definition(tool: Tool) -> ToolDefinition:
+    return ToolDefinition(
+        name=tool.name,
+        description=tool.description or "",
+        parameters=tool.input_schema,
+        sensitive=bool(tool.annotations and tool.annotations.destructive_hint),
+    )
