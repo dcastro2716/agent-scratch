@@ -207,3 +207,49 @@ No se ejecutó la solicitud de devolución sin la aprobación del asesor. Las co
 ### Conclusión
 
 Con estas pruebas comprobe que el agente espera la decisión del asesor antes de registrar una devolución. Si se aprueba, registra la solicitud, si se rechaza, no la ejecuta. Tambien avisa cuando el cliente no existe. En general, el control humano funciono.
+
+## Sesión 9 — Despliegue en Azure
+
+Equipo: `team-01`. Dominio: `fees`.
+
+| Comprobación | Resultado |
+|---|---|
+| Tests en el contenedor (paso 3) | **139 passed, 5 skipped**. En local: **144 passed** |
+| Acción aprobada después de reiniciar `uvicorn` (paso 2, Cosmos DB) | La solicitud siguió pendiente después de reiniciar el servidor y se pudo aprobar sin error. Resultado: `{"id": "RFD-9002", "fee_id": "FEE-4002", "status": "registered", "reason": "cobro indebido"}` |
+| Imagen desplegada (`team-NN/agent:<sha>`) | `team-01/agent:3b3d309bbab5361316ad4bd72f712a160530947c` |
+| Revisión activa y duración del job `deploy` | `ca-agent-chat-01--0000003`. El despliegue terminó en verde y tardó **2 min 24 s** |
+| `/health` del agente desplegado | Con token: **200**, `{"status":"ok"}`. Sin token: **401** |
+| Respuesta con `Fuentes:` contra Azure (y su tiempo en ms) | Pregunta: «¿En qué casos se puede pedir la devolución de una comisión?». Respondió con **2 fuentes**. Primer texto: **7006 ms**; respuesta completa: **7178 ms** |
+| Acción aprobada contra Azure, con su `resultado:` | La solicitud se registró después de aprobarla. Resultado: `{"id": "RFD-9001", "fee_id": "FEE-4002", "status": "registered", "reason": "Cobro indebido"}`. El dinero todavía no se ha devuelto |
+
+Respuesta del agente:
+
+> Se puede pedir la devolución cuando: 1) hubo un cobro duplicado de la misma comisión; 2) se cobró una comisión que no corresponde al tarifario vigente en la fecha del cobro; 3) se cobró por un servicio que no solicitaste. Además, tienes hasta 1 año desde la fecha del cobro para solicitarla.
+
+Fuentes:
+
+1. `fee-refund-policy.docx` · Política de devolución de comisiones > Cuándo se devuelve una comisión
+2. `fees-faq.md` · Preguntas frecuentes sobre comisiones > ¿Cuánto cobran por retirar en un cajero de otro banco? > ¿Puedo pedir que me devuelvan una comisión?
+
+Respuesta después de aprobar:
+
+> La solicitud de devolución quedó registrada (RFD-9001) para la comisión FEE-4002 por “Cobro indebido”; la solicitud está registrada y queda para que el banco la procese, no aplicada aún.
+
+Los tests y el despliegue del equipo quedaron en verde en [GitHub Actions](https://github.com/dcastro2716/agent-scratch/actions/runs/45556246881).
+
+### Qué pone Azure y qué pone la imagen
+
+Azure configura `AZURE_CLIENT_ID`, `AZURE_OPENAI_ENDPOINT`, `COSMOS_ENDPOINT`, `COSMOS_DATABASE`, `COSMOS_CONTAINER`, `SEARCH_ENDPOINT`, `SEARCH_INDEX`, `MCP_URL`, `MCP_SCOPE`, `KEY_VAULT_URI`, `FOUNDRY_PROJECT_ENDPOINT`, `TEAM_ID` y `APPLICATIONINSIGHTS_CONNECTION_STRING`.
+
+La imagen trae `DOMAIN`, `FOUNDRY_AUTH_PROVIDER`, `KNOWLEDGE_BASE` y `AGENT_RUNTIME`. También usa `AZURE_OPENAI_ENDPOINT` para completar `FOUNDRY_ENDPOINT`. El `.env` queda fuera de la imagen.
+
+### Problemas que encontraste y cómo los resolviste
+
+- Al principio el chat dio timeout porque el agente en Azure estaba arrancando. Después respondió bien.
+- El agente pidió otra vez el motivo de la devolución. Al confirmarlo, dejó la solicitud pendiente y se pudo continuar.
+- Al probar `agent:local`, salió el error por falta de `SEARCH_ENDPOINT` y `SEARCH_INDEX`, como indica la guía.
+- Falta dejar un PR abierto hacia `equipo-01`, porque el anterior está cerrado sin merge.
+
+### Conclusión
+
+El agente respondió desde Azure con sus fuentes y registró la solicitud después de aprobarla. Con Cosmos DB, la acción pendiente no se perdió al reiniciar el servidor. Las pruebas pasaron y queda entregar estos resultados en el PR.
