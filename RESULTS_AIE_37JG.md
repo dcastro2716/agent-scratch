@@ -253,3 +253,36 @@ La imagen trae `DOMAIN`, `FOUNDRY_AUTH_PROVIDER`, `KNOWLEDGE_BASE` y `AGENT_RUNT
 ### Conclusión
 
 El agente respondió desde Azure con sus fuentes y registró la solicitud después de aprobarla. Con Cosmos DB, la acción pendiente no se perdió al reiniciar el servidor. Las pruebas pasaron y queda entregar estos resultados en el PR.
+
+## Sesión 10 — Trazas por turno y dashboard
+
+Equipo: `team-01`. App Insights: `appi-team-01`. Dominio: `fees`.
+
+Los cuatro casos contra el agente desplegado (paso 8):
+
+| Caso | `operation_Id` | Latencia (ms) | Tokens de entrada | Tokens de salida | Tools | Error | Observaciones |
+|---|---|---|---|---|---|---|---|
+| Saludo | `d4ae120f95bdd5c6cb49b9efc179bcb5` | 3195 | 1605 | 184 | — | — | Respondió al saludo sin usar tools |
+| Consulta con retrieval | `26c3a9a38ea13f8c2c801c1e556ab2c7` | 9234 | 1752 | 1060 | — | — | Respondió sobre devoluciones sin usar tools |
+| Llamada a tool | `ec2ae78f3b708f78e16aafb0a6274971` | 13555 | 4283 | 1451 | `get_charged_fees:ok` | — | Consultó las comisiones sin error |
+| Error controlado | `a822f781b84ddf948c003fa600289e74` | 204 | — | — | — | `not_found` | Devolvió 404 porque la acción no existía. No aparecen tokens en la traza |
+
+
+### Lo que dice el workbook
+
+El panel mostró 13 registros entre turnos y decisiones, con 1 error.
+
+| Panel | Lo que viste |
+|---|---|
+| Latencia p95 por intención | `product_question`: 47821 ms; `sensitive_action`: 45821 ms; `data_query`: 19123 ms; `greeting`: 3195 ms |
+| Tokens por turno | El gráfico mostró más tokens de entrada que de salida y el mayor consumo cerca de la 1:15 p. m. En mis pruebas, el saludo usó 1789 tokens en total, la consulta sobre devoluciones 2812 y la consulta de comisiones 5734 |
+| Dónde se va el tiempo de un turno | Foundry - chat acumuló más tiempo: 146405 ms en 27 llamadas. El MCP acumuló 31228 ms en 13 llamadas; Cosmos DB, 11621 ms; embeddings, 5417 ms; y AI Search, 2159 ms. También hubo 66575 ms en llamadas clasificadas como «otro» |
+| Tools con error | `get_charged_fees` tuvo 3 llamadas con error y 3 correctas. `request_fee_refund` apareció 2 veces pendiente de aprobación y 2 con resultado correcto |
+
+### ¿Qué optimizarías primero y por qué?
+
+Primero revisaría las llamadas al modelo, porque Foundry acumuló la mayor parte del tiempo. También revisaría los errores de la consulta de comisiones para entender por qué falló en algunos intentos.
+
+### Conclusión
+
+Pude ver las cuatro pruebas en App Insights y revisar los paneles del equipo. El saludo y la pregunta sobre devoluciones no usaron tools; la consulta de comisiones sí. El error de la acción inexistente también quedó registrado. El workbook ayudó a ver que las llamadas al modelo tomaron más tiempo y que hubo errores al consultar comisiones.
