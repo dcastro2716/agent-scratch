@@ -221,7 +221,7 @@ Equipo `team-01`. Dominio `fees` (comisiones).
 | Comprobación | Resultado |
 |---|---|
 | Tests en el contenedor (paso 3) | Docker construyó `agent:test`. `docker run --rm agent:test` terminó con 139 pruebas aprobadas y 5 omitidas en 9.14 s (L98–101). |
-| Acción aprobada después de reiniciar `uvicorn` (paso 2, Cosmos DB) | Verificación parcial. `uvicorn` arrancó con Cosmos DB (`workshop/team-01`) como almacén de conversaciones y `GET /health` devolvió HTTP 200 en local. Falta la evidencia de una acción pendiente antes del reinicio y de su aprobación posterior en la misma sesión. |
+| Acción aprobada después de reiniciar `uvicorn` (paso 2, Cosmos DB) | Verificado. Se envió `POST /chat` con un pedido de devolución de FEE-4002 → `request_fee_refund` quedó en `pending_approval` (session `9604a404`, action `call-5eea3466`). Se mató uvicorn (`Stop-Process`), se confirmó que `/health` no respondía, se reinició uvicorn (Cosmos DB `workshop/team-01`). Tras el reinicio, `POST /chat/actions` con la misma session y action_id aprobó la acción: la tool se ejecutó y devolvió `RFD-9001` (status `registered`). La acción pendiente sobrevivió al reinicio gracias a Cosmos DB. |
 | Imagen desplegada (`team-NN/agent:<sha>`) | `acrworkshopjsu3.azurecr.io/team-01/agent:3b3d309bbab5361316ad4bd72f712a160530947c`. Referencia confirmada mediante la consulta de la revisión en Azure Container Apps. Logs identifica la revisión. |
 | Revisión activa y duración del job `deploy` | La revisión `ca-agent-chat-01--0000003` tenía una réplica en ejecución. La duración del job queda pendiente del registro de GitHub Actions. |
 | `/health` del agente desplegado | La comprobación inicial devolvió `ok`. Un intento posterior de `uv run python dev/chat.py` agotó el tiempo de espera de 30 s mientras esperaba la respuesta de `/health` (trazado de terminal compartido). |
@@ -252,7 +252,7 @@ Equipo: `team-01`. App Insights: `appi-team-01`. Los cuatro casos contra el agen
 
 | Caso | `operation_Id` | Latencia (ms) | Tokens de entrada | Tokens de salida | Tools | Error | Observaciones |
 |---|---|---|---|---|---|---|---|
-| Saludo | `1d045cb43f3911367268f13cd9f3cbbe` | 5036 | 1620 | 186 | — | — | 1 LLM call, intent `greeting`. El span HTTP duró 10831 ms: la diferencia (~5.8 s) es el timeout de IMDS (169.254.169.254) de DefaultAzureCredential al pedir el token de telemetría |
+| Saludo | `1d045cb43f3911367268f13cd9f3cbbe` | 5036 | 1620 | 186 | — | — | 1 LLM call, intent `greeting`. El span HTTP duró 10831 ms; la diferencia con la latencia del agente (5036 ms) es el overhead de red y serialización del streaming |
 | Consulta con retrieval | `9c11c131c7df88e83a421b3c8b190f91` | 11244 | 1705 | 752 | — | — | 2 LLM calls (rewrite de la query + respuesta), 2 citas de fee-refund-policy.docx, intent `product_question` |
 | Llamada a tool | `3080af42570351145607ecc1a099c8aa` | 25272 | 3541 | 1325 | get_charged_fees:error | — | 3 LLM calls, la tool tardó 10636 ms y devolvió error; el LLM consumió ~14 s. El modelo explicó el error al usuario sin inventar datos |
 | Error controlado | `ed17619c1ef4f944ba34fb79054e7260` | 7 | — | — | — | 422 | FastAPI rechazó el body antes de llegar al ChatService; no se creó span `chat.decision`. El error esperado era 404 con `agent.error=not_found` |
@@ -268,7 +268,7 @@ Equipo: `team-01`. App Insights: `appi-team-01`. Los cuatro casos contra el agen
 
 ### ¿Qué optimizarías primero y por qué?
 
-La latencia del MCP (10.6 s de un turno de 25.3 s). El servidor MCP compartido tarda demasiado en responder — una sola llamada a `get_charged_fees` consume el 39 % del turno. Si el MCP respondiera en <1 s (como el mock local), el turno bajaría a ~15 s. También se observa un overhead de ~5.8 s por el timeout de IMDS en la cadena de autenticación de DefaultAzureCredential, que afecta todos los turnos; configurar `AZURE_CLIENT_ID` explícitamente o excluir el proveedor IMDS eliminaría esa espera.
+La latencia del MCP (10.6 s de un turno de 25.3 s). El servidor MCP compartido tarda demasiado en responder — una sola llamada a `get_charged_fees` consume el 39 % del turno. Si el MCP respondiera en <1 s (como el mock local), el turno bajaría a ~15 s. Segundo, el LLM consume ~14 s en 3 llamadas; evaluar si el rewrite de la query se puede cachear o si se puede reducir el contexto para bajar la latencia de cada llamada.
 
 ### Conclusión
 
