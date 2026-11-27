@@ -256,21 +256,17 @@ El agente respondió desde Azure con sus fuentes y registró la solicitud despu�
 
 ## Sesión 10 — Trazas por turno y dashboard
 
-Equipo: `team-01`. App Insights: `appi-team-01`. Dominio: `fees`.
-
-Los cuatro casos contra el agente desplegado (paso 8):
+Equipo: `team-01`. App Insights: `appi-team-01`. Los cuatro casos contra el agente desplegado (paso 8).
 
 | Caso | `operation_Id` | Latencia (ms) | Tokens de entrada | Tokens de salida | Tools | Error | Observaciones |
 |---|---|---|---|---|---|---|---|
-| Saludo | `d4ae120f95bdd5c6cb49b9efc179bcb5` | 3195 | 1605 | 184 | — | — | Respondió al saludo sin usar tools |
-| Consulta con retrieval | `26c3a9a38ea13f8c2c801c1e556ab2c7` | 9234 | 1752 | 1060 | — | — | Respondió sobre devoluciones sin usar tools |
-| Llamada a tool | `ec2ae78f3b708f78e16aafb0a6274971` | 13555 | 4283 | 1451 | `get_charged_fees:ok` | — | Consultó las comisiones sin error |
-| Error controlado | `a822f781b84ddf948c003fa600289e74` | 204 | — | — | — | `not_found` | Devolvió 404 porque la acción no existía. No aparecen tokens en la traza |
+| Saludo | `d4ae120f95bdd5c6cb49b9efc179bcb5` | 3195 | 1605 | 184 | — | — | Respondió sin usar tools. Fue el turno más rápido de las tres consultas y generó 184 tokens de salida |
+| Consulta con retrieval | `26c3a9a38ea13f8c2c801c1e556ab2c7` | 9234 | 1752 | 1060 | — | — | Respondió la pregunta sobre devoluciones sin usar tools. Tardó más que el saludo y generó 1060 tokens de salida |
+| Llamada a tool | `ec2ae78f3b708f78e16aafb0a6274971` | 13555 | 4283 | 1451 | `get_charged_fees:ok` | — | La consulta terminó correctamente con `get_charged_fees:ok` en 13555 ms y generó 1451 tokens de salida |
+| Error controlado | `a822f781b84ddf948c003fa600289e74` | 204 | — | — | — | `not_found` | Devolvió 404 porque la acción no existía y quedó como `chat.decision` con `not_found`. No llamó tools y los campos de tokens quedaron vacíos |
 
 
 ### Lo que dice el workbook
-
-El panel mostró 13 registros entre turnos y decisiones, con 1 error.
 
 | Panel | Lo que viste |
 |---|---|
@@ -281,7 +277,8 @@ El panel mostró 13 registros entre turnos y decisiones, con 1 error.
 
 ### ¿Qué optimizarías primero y por qué?
 
-Primero revisaría las llamadas al modelo, porque Foundry acumuló la mayor parte del tiempo. También revisaría los errores de la consulta de comisiones para entender por qué falló en algunos intentos.
+- Revisar las llamadas a Foundry, porque en el periodo del equipo fue el servicio que más tiempo acumuló.
+- Agregaría más detalle del error en las trazas, como el tipo de fallo y el servicio que lo produjo, porque el panel solo muestra que la tool falló y no permite saber si fue por timeout, conexión o un error del banco. Sin guardar datos del cliente.
 
 ### Conclusión
 
