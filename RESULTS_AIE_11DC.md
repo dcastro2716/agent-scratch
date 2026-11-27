@@ -203,3 +203,36 @@ Tiempos de versión Azure
 La versión en Azure es mas rápida en responder que la versión local, incluyen el hecho que la versión de azure está de manera remota. Vemos también que gasta mas token de entrada pero menos de salida, esto puede ser porque al tener memoria persistente tiene mayor historia.
 
 Aparte de eso, el proceso de despliegue es identico al de cualquier otra aplicación, no hay diferencias por ser una aplicación de IA.
+
+## Sesión 10 — Trazas por turno y dashboard
+
+Equipo: `team-01`. App Insights: `appi-team-01`. Los cuatro casos contra el agente desplegado (paso 8).
+
+| Caso | `operation_Id` | Latencia (ms) | Tokens de entrada | Tokens de salida | Tools | Error | Observaciones |
+|---|---|---|---|---|---|---|---|
+| Saludo | 9b5ee91ca2ef35fdb0733eebf05a7418 | 4840 | 1782 | 121 | ninguna | ninguno | el mensaje de salida consume pocos tokens, posiblemente ya estaba en cache |
+| Consulta con retrieval | 94f1ec137e6ec3bf56bed793d7e3041d | 7900 | 1880 | 759 | ninguna | ninguno | se obseerva que detectó el intent como pregunta del dominio |
+| Llamada a tool | 4980048a2cc9327e920b12e637bcced5 | 52962 | 3984 | 1798 | get_charged_fees:error | no muestra error incluso cuando el tool dio error | los tokens de respuesta son elevados porque no cachea la respuesta del api. Aparecen multiples registros, debido a cada paso. Se observa que la llamada a la tools se llevó casi todo el tiempo|
+| Error controlado | 6d7cb64ee1290acc2f2faeb22c415fcd | 187 | - | - | - | not_found | no hubo consumo de tokens ya que era una operación inválida y el mismo código lo puede reconocer. |
+
+En **Observaciones**, una línea: lo que llamó la atención de la traza (qué se llevó el tiempo, la dependencia que falló, si el
+error permite ubicar el turno). En **Tools**, `—` si el turno no llamó ninguna.
+
+### Lo que dice el workbook
+
+| Panel | Lo que viste |
+|---|---|
+| Latencia p95 por intención | dataquery:52537 product_question:12890 greetings:10831|
+| Tokens por turno | get_charged_fees:37911 |
+| Dónde se va el tiempo de un turno | _(anotar)_ |
+| Tools con error | chat.decision not_found 00000000-0000-0000-0000-000000000000 3bb2d240a6e0fc3293345701b1a8b353 |
+
+### ¿Qué optimizarías primero y por qué?
+
+- Reducir timeout de llamada de tools que sean consultivas.
+- Agregar un try en las tools o CB
+- Incluiria el error de la tools en la trazabilidad
+
+### Conclusión
+
+Insights nos ayuda a saber el comportamiendo del agente y poder detectar puntos donde esta habiendo error antes de que la incidencia escale a más. Sin embargo, eso no esto, sino tambín sirve para multiples cosas como optimizar las respuestas del agente, reducir costos y mejorar la experiencia del usuario.
