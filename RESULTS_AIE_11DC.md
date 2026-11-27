@@ -224,7 +224,7 @@ error permite ubicar el turno). En **Tools**, `—` si el turno no llamó ningun
 |---|---|
 | Latencia p95 por intención | dataquery:52537 product_question:12890 greetings:10831|
 | Tokens por turno | get_charged_fees:37911 |
-| Dónde se va el tiempo de un turno | _(anotar)_ |
+| Dónde se va el tiempo de un turno | MCP: Total 65 p95 26, Foundry Chat total 46 p95 6, otro total 8 p95 1, CosmosDB total 4 p95 0.1, Foundy embeddings total 3 p95 1, AI Search total 1 p95 0.1. Se observa que la mayor parte del tiempo se va en el MCP, en la invocación de las tools.  |
 | Tools con error | chat.decision not_found 00000000-0000-0000-0000-000000000000 3bb2d240a6e0fc3293345701b1a8b353 |
 
 ### ¿Qué optimizarías primero y por qué?
@@ -232,6 +232,7 @@ error permite ubicar el turno). En **Tools**, `—` si el turno no llamó ningun
 - Reducir timeout de llamada de tools que sean consultivas.
 - Agregar un try en las tools o CB
 - Incluiria el error de la tools en la trazabilidad
+- Aumentar las intancias de la tools para mejorara tiempos (si esta en aks por ejemplo) o mejorar el cold start (si esta en aks o en functions). 
 
 ### Conclusión
 
