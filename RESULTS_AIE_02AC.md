@@ -244,3 +244,32 @@ En un intento posterior, `dev/chat.py` agotó el tiempo de espera al consultar `
 ### Conclusión
 
 El contenedor de pruebas tuvo 139 pruebas aprobadas y 5 omitidas. En la prueba inicial en Azure, el agente respondió a `/health`, citó la política de devoluciones y registró la solicitud tras la aprobación del asesor. Un intento posterior de `/health` terminó por tiempo de espera. En local, `uvicorn` arrancó con Cosmos DB como almacén de conversaciones y respondió HTTP 200 a `/health`. Quedó pendiente comprobar que una acción pendiente se conserva tras reiniciar `uvicorn` y se puede aprobar en la misma sesión, así como verificar la duración del job `deploy`.
+
+
+## Sesión 10 — Trazas por turno y dashboard
+
+Equipo: `team-01`. App Insights: `appi-team-01`. Los cuatro casos contra el agente desplegado (paso 8).
+
+| Caso | `operation_Id` | Latencia (ms) | Tokens de entrada | Tokens de salida | Tools | Error | Observaciones |
+|---|---|---|---|---|---|---|---|
+| Saludo | `1d045cb43f3911367268f13cd9f3cbbe` | 5036 | 1620 | 186 | — | — | 1 LLM call, intent `greeting`. El span HTTP duró 10831 ms: la diferencia (~5.8 s) es el timeout de IMDS (169.254.169.254) de DefaultAzureCredential al pedir el token de telemetría |
+| Consulta con retrieval | `9c11c131c7df88e83a421b3c8b190f91` | 11244 | 1705 | 752 | — | — | 2 LLM calls (rewrite de la query + respuesta), 2 citas de fee-refund-policy.docx, intent `product_question` |
+| Llamada a tool | `3080af42570351145607ecc1a099c8aa` | 25272 | 3541 | 1325 | get_charged_fees:error | — | 3 LLM calls, la tool tardó 10636 ms y devolvió error; el LLM consumió ~14 s. El modelo explicó el error al usuario sin inventar datos |
+| Error controlado | `ed17619c1ef4f944ba34fb79054e7260` | 7 | — | — | — | 422 | FastAPI rechazó el body antes de llegar al ChatService; no se creó span `chat.decision`. El error esperado era 404 con `agent.error=not_found` |
+
+### Lo que dice el workbook
+
+| Panel | Lo que viste |
+|---|---|
+| Latencia p95 por intención | `greeting` 5036 ms, `product_question` 11244 ms, `data_query` 25272 ms. Las consultas con tools tardan 5× más que un saludo |
+| Tokens por turno | `greeting` 1620/186, `product_question` 1705/752, `data_query` 3541/1325. Los turnos con tool duplican los tokens de entrada (el contexto crece con la tool definition y el resultado) |
+| Dónde se va el tiempo de un turno | En el turno con tool: LLM 14312 ms (52 %), Tool (MCP) 10636 ms (39 %), Cosmos DB 1552 ms (6 %). El MCP es casi la mitad del turno |
+| Tools con error | `get_charged_fees` con 1 error. La tool devolvió error de negocio y el modelo lo manejó correctamente |
+
+### ¿Qué optimizarías primero y por qué?
+
+La latencia del MCP (10.6 s de un turno de 25.3 s). El servidor MCP compartido tarda demasiado en responder — una sola llamada a `get_charged_fees` consume el 39 % del turno. Si el MCP respondiera en <1 s (como el mock local), el turno bajaría a ~15 s. También se observa un overhead de ~5.8 s por el timeout de IMDS en la cadena de autenticación de DefaultAzureCredential, que afecta todos los turnos; configurar `AZURE_CLIENT_ID` explícitamente o excluir el proveedor IMDS eliminaría esa espera.
+
+### Conclusión
+
+Las trazas de OpenTelemetry permiten ver exactamente dónde se gasta el tiempo de cada turno. El saludo es rápido (5 s, 1 LLM call), la consulta con retrieval moderada (11 s, 2 LLM calls) y la llamada a tool la más lenta (25 s, 3 LLM calls + MCP). El cuello de botella principal es el MCP compartido, no el LLM. El error controlado no generó span `chat.decision` porque FastAPI rechazó el body con 422 antes de llegar al servicio — el body del `az rest` no cumplió el schema esperado. Los atributos del span (`agent.intent`, tokens, tools, `agent.error`) permiten construir dashboards de operación sin exponer el contenido de las conversaciones.
