@@ -195,3 +195,31 @@ Los logs de arranque de la revisión confirman la configuración con la identida
 ### Conclusión
 
 El agente desplegado en Azure cumple las pruebas de cierre. `main` publicó `team-01/agent:a6b04f5...` y la revisión `ca-agent-chat-01--0000004` atiende el 100 % del tráfico. La Container App rechaza llamadas sin token (`401`) y responde `/health`. Con la identidad administrada, el agente leyó `idx-team-01` en AI Search (respuesta con `Fuentes:`), llamó al MCP compartido y guardó la conversación en Cosmos DB. La acción sensible quedó bloqueada hasta que el asesor aprobó y se registró como `RFD-9001` sin aplicarse. Queda una observación: tras un arranque en frío, la primera llamada al MCP puede fallar, aunque el agente lo comunica sin inventar datos.
+
+## Sesión 10 — Trazas por turno y dashboard
+
+Equipo: `team-01`. App Insights: `appi-team-01`. Los cuatro casos contra el agente desplegado (paso 8).
+
+| Caso | `operation_Id` | Latencia (ms) | Tokens de entrada | Tokens de salida | Tools | Error | Observaciones |
+|---|---|---|---|---|---|---|---|
+| Saludo | `20c9bd9a7fbe4d6ed16108d08fe02d92` | 4025 | 1458 | 111 | — | — | Una sola llamada al modelo (1480 ms), pero el turno igual hizo `embeddings` y una búsqueda en AI Search (1340 ms) que un saludo no necesita. |
+| Consulta con retrieval | `144b41ce32a11073619e7b11c95d56fe` | 6481 | 1512 | 672 | — | — | `embeddings` (221 ms) y la búsqueda en `idx-team-01` (146 ms) dentro del turno; el modelo se llevó 4708 ms y la respuesta citó 3 secciones de `fee-refund-policy.docx`. |
+| Llamada a tool | `daf8604a5bf52d0893e87dd5e616591a` | 10728 | 3206 | 1140 | `get_charged_fees` | — | `tool get_charged_fees` y su `POST /mcp` tardaron 106 ms; el modelo se llevó 8612 ms en 2 llamadas. El intento anterior (`8dcdc8ca24b3224cacab67e83fc1c562`) falló por timeout del MCP en `tools/call` (10024 ms). |
+| Error controlado | `b22f9f4d137e737dcbe9bde02be88bb7` | 7 | — | — | — | `not_found` | `chat.decision` en rojo, con un solo `GET` a Cosmos DB (404); el `operation_Id` y la `session_Id` `00000000-…` permiten ubicar el turno en «Turnos con error». |
+
+### Lo que dice el workbook
+
+| Panel | Lo que viste |
+|---|---|
+| Latencia p95 por intención | En el periodo de 4 h: `sensitive_action` 22793 ms, `product_question` 21130 ms, `data_query` 15972 ms y `greeting` 4025 ms. Hay 1 o 2 turnos por intención, así que el p95 es casi el máximo. |
+| Tokens por turno | 8 turnos con 20164 tokens de entrada y 7301 de salida: 3924 tokens y 1,9 llamadas al modelo por turno en promedio. Los turnos con tool duplican la entrada de un saludo (unos 3200 contra 1458). |
+| Dónde se va el tiempo de un turno | Foundry chat suma 55367 ms en 13 llamadas (p95 8911 ms); le siguen el MCP con 20337 ms (casi todo en 2 timeouts de 10 s) y AI Search con 2058 ms. Cosmos DB hace 62 llamadas, pero solo suma 746 ms. |
+| Tools con error | `get_charged_fees` falló 2 de 4 veces, con p95 de 10100 ms; las dos fallas fueron la primera llamada al MCP después de un rato sin uso. `request_fee_refund` no tuvo errores. |
+
+### ¿Qué optimizarías primero y por qué?
+
+La primera llamada al MCP después de un rato sin uso. Es la única dependencia que falla: cada vez espera 10 s hasta el timeout y deja al cliente sin el dato que pidió, aunque el agente no invente cargos. Mantener una réplica mínima del MCP (o calentarlo con un `tools/list` al arrancar) evitaría el error. Después atacaría el tiempo del modelo, que se lleva la mayor parte de cada turno, y no haría retrieval en los saludos.
+
+### Conclusión
+
+App Insights registra cada turno del agente desplegado como un `chat.turn` o un `chat.decision` con su intención, tokens, llamadas al modelo y dependencias, y el `operation_Id` alcanza para ubicar un turno y ver qué servicio tardó o falló. Los cuatro casos mostraron lo esperado: el saludo sin tools, el retrieval con `embeddings` y AI Search, la tool con su `POST /mcp` y el error controlado en rojo con `not_found`. El workbook dejó ver que el modelo es el mayor costo de tiempo y que el MCP falla por timeout en la primera llamada tras un rato sin uso.
