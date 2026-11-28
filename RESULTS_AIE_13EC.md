@@ -164,3 +164,34 @@ No. La devolución aprobada se registró solo después de que el asesor respondi
 ### Conclusión
 
 La aprobación humana controló la ejecución: `FEE-4002` se registró como `RFD-9001` tras la aprobación y no se aplicó aún; el rechazo no ejecutó la devolución. El error de `CUS-9999` se comunicó sin inventar cargos, y el número `1001` fue rechazado como input inválido antes de llamar a una tool. 
+
+## Sesión 9 — Despliegue en Azure
+
+Equipo: `team-01`. Dominio: `fees`.
+
+| Comprobación | Resultado |
+|---|---|
+| Tests en el contenedor (paso 3) | **139 pasaron; 5 omitidos**, en 2.85 s (`docker run --rm agent:test`). |
+| Acción aprobada después de reiniciar `uvicorn` (paso 2, Cosmos DB) | Tras reiniciar `uvicorn`, aprobé `request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)`. Cosmos DB conservó la acción pendiente y, al aprobarla, se registró como `RFD-9001` (`registered`, `FEE-4002`). |
+| Imagen desplegada (`team-NN/agent:<sha>`) | `team-01/agent:a6b04f538c2fa875307cdcb4bd5274266cd72061` en el ACR del workshop (corrida `deploy-agent` del merge del PR #53 a `main`, 26/11/2026, `success`). |
+| Revisión activa y duración del job `deploy` | Revisión `ca-agent-chat-01--0000004`: pasó por `Activating` y terminó en `RunningAtMaxScale`. Job `deploy`: **1 min 57 s** (16:01:56 → 16:03:53 UTC); la corrida completa, con `test`, duró 2 min 50 s. |
+| `/health` del agente desplegado | `{"status":"ok"}` (HTTP 200) con el token de `az login` para `api://{id_de_la_app_que_no_se_debe_publicar}/.default`. Sin token, `/health` responde `401`. |
+| Respuesta con `Fuentes:` contra Azure (y su tiempo en ms) | «Soy CUS-1001, ¿por qué me cobraron comisiones este mes? ¿Alguna se puede devolver?» → `[product_question]` con 4 `Fuentes:` (`fee-refund-policy.docx` > Cómo se solicita, Cuándo se devuelve una comisión y Plazos; `fees-faq.md` > ¿Puedo pedir que me devuelvan una comisión?). Primer texto en **21526 ms**, respuesta completa en **21656 ms** (3104 tokens de entrada, 1194 de salida). En este turno `get_charged_fees` respondió error («El servicio del banco no responde») y el agente lo dijo sin inventar cargos. |
+| Acción aprobada contra Azure, con su `resultado:` | `request_fee_refund(fee_id=FEE-4002, reason=cobro indebido)` → **NO SE EJECUTA** (`call-d90bd96d`, pendiente de aprobación); respondí `s` → `resultado: {"id": "RFD-9001", "fee_id": "FEE-4002", "status": "registered", "reason": "cobro indebido"}`. |
+
+### Qué pone Azure y qué pone la imagen
+
+Variables que puso Azure (Terraform) en `ca-agent-chat-01`, leídas con `az containerapp show ... --query "properties.template.containers[0].env[].name"`: `APPLICATIONINSIGHTS_CONNECTION_STRING`, `AZURE_CLIENT_ID`, `AZURE_OPENAI_ENDPOINT`, `COSMOS_CONTAINER`, `COSMOS_DATABASE`, `COSMOS_ENDPOINT`, `FOUNDRY_PROJECT_ENDPOINT`, `KEY_VAULT_URI`, `MCP_SCOPE`, `MCP_URL`, `SEARCH_ENDPOINT`, `SEARCH_INDEX` y `TEAM_ID`. Ninguna es una api key ni una contraseña: son endpoints, nombres de recursos y el id de la identidad administrada.
+
+La imagen pone `DOMAIN` (`--build-arg`, variable `DOMAIN` del repo), `FOUNDRY_AUTH_PROVIDER`, `KNOWLEDGE_BASE` y `AGENT_RUNTIME`; su `CMD` copia `AZURE_OPENAI_ENDPOINT` a `FOUNDRY_ENDPOINT` si esta no está definida. El workflow solo cambia la imagen y no fija variables.
+
+Los logs de arranque de la revisión confirman la configuración con la identidad administrada: `Foundry auth provider: entra_id`, `Knowledge base: azure_search · ... (índice idx-team-01) · 29 chunks`, `Conversation store: Cosmos DB workshop/team-01`, `MCP: .../mcp · 3 tools: get_transactions, get_charged_fees, request_fee_refund` y `Agent runtime: agent_framework`.
+
+### Problemas que encontraste y cómo los resolviste
+
+- **Certificado autofirmado en la cadena TLS.** Python falló con `CERTIFICATE_VERIFY_FAILED: self-signed certificate in certificate chain` (el proxy de la red intercepta HTTPS). Se resolvió exportando los certificados del llavero a un archivo y apuntando `SSL_CERT_FILE` a él, sin desactivar la verificación.
+- **El MCP no respondió en el primer turno.** La revisión acababa de arrancar (07:25 UTC) y el primer `get_charged_fees` devolvió «El servicio del banco no responde»; el log registra `get_charged_fees error → respuesta product_question`. El agente no inventó cargos y respondió con la política y sus fuentes. En el turno siguiente la misma tool respondió bien y se pudo pedir la devolución.
+
+### Conclusión
+
+El agente desplegado en Azure cumple las pruebas de cierre. `main` publicó `team-01/agent:a6b04f5...` y la revisión `ca-agent-chat-01--0000004` atiende el 100 % del tráfico. La Container App rechaza llamadas sin token (`401`) y responde `/health`. Con la identidad administrada, el agente leyó `idx-team-01` en AI Search (respuesta con `Fuentes:`), llamó al MCP compartido y guardó la conversación en Cosmos DB. La acción sensible quedó bloqueada hasta que el asesor aprobó y se registró como `RFD-9001` sin aplicarse. Queda una observación: tras un arranque en frío, la primera llamada al MCP puede fallar, aunque el agente lo comunica sin inventar datos.
